@@ -420,4 +420,9 @@ class PaymentPage extends Page implements HasForms
         //     ->success()
         //     ->send();
     }
+
+    private function confirmPayment()
+    {
+        dd("hello");
+    }
 }

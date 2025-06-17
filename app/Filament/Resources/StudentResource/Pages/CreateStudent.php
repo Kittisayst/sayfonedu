@@ -20,18 +20,4 @@ class CreateStudent extends CreateRecord
     {
         return $this->getResource()::getUrl('index');
     }
-
-    protected function getFormActions(): array
-    {
-        return [
-            Action::make('submit')
-                ->label('ບັນທຶກຂໍ້ມູນນັກຮຽນ')
-                ->icon('heroicon-o-check-circle')
-                ->color('success'),
-            Action::make('cancel')
-                ->label('ຍົກເລີກ')
-                ->icon('heroicon-o-x-circle')
-                ->color('gray'),
-        ];
-    }
 }

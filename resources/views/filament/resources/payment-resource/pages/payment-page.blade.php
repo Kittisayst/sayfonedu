@@ -113,11 +113,11 @@
                             </p>
                             <p>
                                 <strong>ຊື່ຜູ້ປົກຄອງ:</strong>
-                                <span>{{ $selectedStudent->parents[0]?->getFullName() ?? 'ບໍ່ມີຂໍ້ມູນ' }}</span>
+                                {{ optional($selectedStudent->parents->first())->getFullName() ?? 'ບໍ່ມີຂໍ້ມູນ' }}
                             </p>
                             <p>
                                 <strong>ເບີໂທຜູ້ປົກຄອງ:</strong>
-                                <span> {{ $selectedStudent->parents[0]?->phone ?? 'ບໍ່ມີຂໍ້ມູນ' }}</span>
+                                {{ optional($selectedStudent->parents->first())->phone ?? 'ບໍ່ມີຂໍ້ມູນ' }}
                             </p>
                         </div>
                         <div class="">

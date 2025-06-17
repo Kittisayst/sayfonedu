@@ -119,12 +119,9 @@ CREATE TABLE IF NOT EXISTS `backups` (
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`backup_id`),
-  UNIQUE KEY `backups_backup_name_unique` (`backup_name`) USING HASH,
-  KEY `IDX_Backups_initiator` (`initiated_by`),
-  KEY `IDX_Backups_type` (`backup_type`),
-  KEY `IDX_Backups_date` (`backup_date`),
-  KEY `IDX_Backups_status` (`status`)
-) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  UNIQUE KEY `backups_backup_name_unique` (`backup_name`(191)),
+  KEY `IDX_Backups_initiator` (`initiated_by`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
 
@@ -367,12 +364,12 @@ CREATE TABLE IF NOT EXISTS `examinations` (
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`exam_id`),
-  UNIQUE KEY `UQ_Exams_name_year` (`academic_year_id`,`exam_name`) USING HASH,
-  KEY `IDX_Exams_acad_year` (`academic_year_id`),
+  UNIQUE KEY `UQ_Exams_name_year` (`exam_name`(191), `academic_year_id`),
+  KEY `IDX_Exams_academic_year` (`academic_year_id`),
   KEY `IDX_Exams_type` (`exam_type`),
   KEY `IDX_Exams_status` (`status`),
-  KEY `IDX_Exams_dates` (`start_date`,`end_date`)
-) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  KEY `IDX_Exams_dates` (`start_date`, `end_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
 
@@ -426,13 +423,13 @@ CREATE TABLE IF NOT EXISTS `extracurricular_activities` (
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`activity_id`),
-  UNIQUE KEY `UQ_ExtraAct_name_year` (`academic_year_id`,`activity_name`) USING HASH,
-  KEY `IDX_ExtraAct_coord` (`coordinator_id`),
-  KEY `IDX_ExtraAct_acad_year` (`academic_year_id`),
-  KEY `IDX_ExtraAct_type` (`activity_type`),
-  KEY `IDX_ExtraAct_active` (`is_active`),
-  KEY `IDX_ExtraAct_dates` (`start_date`,`end_date`)
-) ENGINE=MyISAM AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  UNIQUE KEY `UQ_Activities_name_year` (`activity_name`(191), `academic_year_id`),
+  KEY `IDX_Activities_coordinator` (`coordinator_id`),
+  KEY `IDX_Activities_academic_year` (`academic_year_id`),
+  KEY `IDX_Activities_type` (`activity_type`),
+  KEY `IDX_Activities_dates` (`start_date`, `end_date`),
+  KEY `IDX_Activities_active` (`is_active`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
 
@@ -910,10 +907,12 @@ CREATE TABLE IF NOT EXISTS `school_store_items` (
   `updated_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`item_id`),
   UNIQUE KEY `school_store_items_item_code_unique` (`item_code`),
-  UNIQUE KEY `school_store_items_item_name_unique` (`item_name`) USING HASH,
-  KEY `IDX_StoreItems_category` (`category`),
-  KEY `IDX_StoreItems_active` (`is_active`)
-) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  UNIQUE KEY `school_store_items_item_name_unique` (`item_name`(191)),
+  KEY `IDX_Store_Items_category` (`category`),
+  KEY `IDX_Store_Items_active` (`is_active`),
+  KEY `IDX_Store_Items_stock` (`stock_quantity`),
+  KEY `IDX_Store_Items_price` (`unit_price`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
 
@@ -1230,11 +1229,11 @@ CREATE TABLE IF NOT EXISTS `student_interests` (
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`interest_id`),
-  UNIQUE KEY `UQ_StudInterests_student_interest` (`student_id`,`interest_name`) USING HASH,
+  UNIQUE KEY `UQ_StudInterests_student_interest` (`student_id`, `interest_name`(191)),
   KEY `IDX_StudInterests_student` (`student_id`),
   KEY `IDX_StudInterests_category` (`interest_category`),
-  KEY `IDX_StudInterests_name` (`interest_name`(250))
-) ENGINE=MyISAM AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  KEY `IDX_StudInterests_name` (`interest_name`(191))
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
 
