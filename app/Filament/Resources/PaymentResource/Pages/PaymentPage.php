@@ -4,6 +4,7 @@ namespace App\Filament\Resources\PaymentResource\Pages;
 
 use App\Filament\Resources\PaymentResource;
 use App\Models\Payment;
+use App\Models\PaymentImage;
 use App\Models\Student;
 use App\Models\Discount;
 use App\Utils\Money;
@@ -29,6 +30,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
 
 class PaymentPage extends Page implements HasForms
 {
@@ -94,6 +96,24 @@ class PaymentPage extends Page implements HasForms
                                     ->columnSpanFull()
                                     ->required()
                                     ->live()
+                                    ->rules([
+                                        function () {
+                                            return function (string $attribute, $value, \Closure $fail) {
+                                                if (empty($value)) {
+                                                    $fail('ກະລຸນາເລືອກຢ່າງໜ້ອຍ 1 ເດືອນ');
+                                                }
+
+                                                // ກວດສອບວ່າເດືອນນີ້ຈ່າຍແລ້ວຫຼືຍັງ
+                                                if ($this->selectedStudent && !empty($value)) {
+                                                    $paidMonths = $this->getPaidTuitionMonths($this->selectedStudent->student_id);
+                                                    $duplicates = array_intersect($value, $paidMonths);
+                                                    if (!empty($duplicates)) {
+                                                        $fail('ເດືອນ ' . implode(', ', $duplicates) . ' ໄດ້ຈ່າຍແລ້ວ');
+                                                    }
+                                                }
+                                            };
+                                        },
+                                    ])
                             ])->columnSpan(1),
 
                         // ເດືອນຄ່າອາຫານ
@@ -105,6 +125,20 @@ class PaymentPage extends Page implements HasForms
                                     ->options(Payment::getMonthOptions())
                                     ->columns(3)
                                     ->columnSpanFull()
+                                    ->rules([
+                                        function () {
+                                            return function (string $attribute, $value, \Closure $fail) {
+                                                // ກວດສອບວ່າເດືອນນີ້ຈ່າຍແລ້ວຫຼືຍັງ
+                                                if ($this->selectedStudent && !empty($value)) {
+                                                    $paidMonths = $this->getPaidFoodMonths($this->selectedStudent->student_id);
+                                                    $duplicates = array_intersect($value, $paidMonths);
+                                                    if (!empty($duplicates)) {
+                                                        $fail('ເດືອນ ' . implode(', ', $duplicates) . ' ໄດ້ຈ່າຍຄ່າອາຫານແລ້ວ');
+                                                    }
+                                                }
+                                            };
+                                        },
+                                    ])
                             ])->columnSpan(1),
                     ]),
                 // ຄ່າທຳນຽມ
@@ -118,11 +152,13 @@ class PaymentPage extends Page implements HasForms
                                     ->prefixIcon('heroicon-o-banknotes')
                                     ->required()
                                     ->numeric()
+                                    ->minValue(0)
                                     ->mask(RawJs::make('$money($input)'))
                                     ->stripCharacters(',')
                                     ->placeholder('ປ່ອນຈຳນວນເງິນ')
                                     ->live(onBlur: true)
                                     ->afterStateUpdated(fn($state, Set $set, Get $get) => $this->calculateTotal($set, $get)),
+
                                 TextInput::make("food_money")
                                     ->label('ຄ່າອາຫານ')
                                     ->prefixIcon('heroicon-o-cube')
@@ -132,6 +168,7 @@ class PaymentPage extends Page implements HasForms
                                     ->stripCharacters(',')
                                     ->live(onBlur: true)
                                     ->afterStateUpdated(fn($state, Set $set, Get $get) => $this->calculateTotal($set, $get)),
+
                                 Select::make('discount_id')
                                     ->label("ສ່ວນຫຼຸດ")
                                     ->prefixIcon('heroicon-o-gift')
@@ -139,10 +176,12 @@ class PaymentPage extends Page implements HasForms
                                     ->options(Discount::getSelectOptions())
                                     ->live()
                                     ->afterStateUpdated(fn($state, Set $set, Get $get) => $this->calculateTotal($set, $get)),
+
                                 TextInput::make("late_fee")
                                     ->label('ຄ່າຈ່າຍຊ້າ')
                                     ->prefixIcon('heroicon-o-flag')
                                     ->numeric()
+                                    ->minValue(0)
                                     ->mask(RawJs::make('$money($input)'))
                                     ->stripCharacters(',')
                                     ->live(onBlur: true)
@@ -150,6 +189,7 @@ class PaymentPage extends Page implements HasForms
                             ])
                             ->columns(1)
                             ->columnSpan(1),
+
                         Fieldset::make("transfer_money")
                             ->label('ເງິນໂອນ')
                             ->schema([
@@ -158,32 +198,38 @@ class PaymentPage extends Page implements HasForms
                                     ->prefixIcon('heroicon-o-credit-card')
                                     ->required()
                                     ->numeric()
+                                    ->minValue(0)
                                     ->mask(RawJs::make('$money($input)'))
                                     ->stripCharacters(',')
                                     ->placeholder('ປ່ອນຈຳນວນເງິນ')
                                     ->live(onBlur: true)
                                     ->afterStateUpdated(fn($state, Set $set, Get $get) => $this->calculateTotal($set, $get)),
+
                                 DateTimePicker::make('payment_date')
                                     ->label('ວັນທີຊຳລະ')
                                     ->prefixIcon('heroicon-o-calendar-days')
                                     ->placeholder('ເລືອກວັນທີ')
-                                    ->required(),
+                                    ->required()
+                                    ->maxDate(now()->addDay()),
+
                                 FileUpload::make('image_path')
                                     ->label("ຮູບການໂອນ")
-                                    ->disk('public') // ກຳນົດ disk ທີ່ໃຊ້ເກັບ
-                                    ->directory('payment_receipts') // ກຳນົດ folder ໃນ disk
-                                    ->visibility('public') // ກຳນົດໃຫ້ໄຟລ໌ສາມາດເຂົ້າເຖິງໄດ້ຈາກ URL
-                                    ->acceptedFileTypes(['image/*']) // ອະນຸຍາດສະເພາະໄຟລ໌ຮູບພາບ
+                                    ->disk('public')
+                                    ->directory('payment_receipts')
+                                    ->visibility('public')
+                                    ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/jpg'])
+                                    ->maxSize(5120) // 5MB
                                     ->imagePreviewHeight('128')
+                                    ->multiple()
+                                    ->maxFiles(3)
                                     ->deleteUploadedFileUsing(function ($file) {
-                                        // Custom logic ສຳລັບລຶບໄຟລ໌
                                         Storage::disk('public')->delete($file);
                                     }),
-
                             ])
                             ->columns(1)
                             ->columnSpan(1),
                     ]),
+
                 Fieldset::make('ຈຳນວນເງິນທັງໝົດ')
                     ->schema([
                         TextInput::make('receipt_number_view')
@@ -191,27 +237,32 @@ class PaymentPage extends Page implements HasForms
                             ->prefixIcon('heroicon-o-hashtag')
                             ->placeholder('ປ້ອນເລກໃບຮັບເງິນ')
                             ->disabled(),
+
                         TextInput::make('total_amount_view')
                             ->label("ລວມເງິນທັງໝົດ")
                             ->prefixIcon('heroicon-o-currency-dollar')
-                            ->disabled() // ຫ້າມແກ້ໄຂດ້ວຍມື
+                            ->disabled()
                             ->numeric()
                             ->mask(RawJs::make('$money($input)'))
                             ->stripCharacters(','),
+
                         TextInput::make('discount_amount_view')
                             ->label('ສ່ວນຫຼຸດ')
                             ->prefixIcon('heroicon-o-tag')
-                            ->disabled() // ຫ້າມແກ້ໄຂດ້ວຍມື
+                            ->disabled()
                             ->numeric()
                             ->mask(RawJs::make('$money($input)'))
                             ->stripCharacters(','),
+
                         Hidden::make('receipt_number'),
                         Hidden::make('discount_amount'),
                         Hidden::make('total_amount'),
                     ]),
+
                 Textarea::make('note')
                     ->label("ໝາຍເຫດ")
-                    ->rows(5)
+                    ->rows(3)
+                    ->maxLength(500)
             ])
             ->statePath('data');
     }
@@ -230,7 +281,7 @@ class PaymentPage extends Page implements HasForms
         $discountAmount = CalculatePay::DiscountAmount($discountId, $sum);
 
         $total = $sum - $discountAmount;
-        // dd($total);
+
         $set('discount_amount_view', Money::toLAK($discountAmount));
         $set('total_amount_view', Money::toLAK($total));
         $set('discount_amount', $discountAmount);
@@ -341,20 +392,27 @@ class PaymentPage extends Page implements HasForms
     }
 
     /**
-     * ⭐ Method ສຳລັບ Header Action
+     * Method ສຳລັບ Header Action
      */
     public function processPaymentAction(): void
     {
         try {
-
-            $this->validate();
+            // Validate form
             $data = $this->form->getState();
 
             if (!$this->selectedStudent) {
                 throw new \Exception('ກະລຸນາເລືອກນັກຮຽນກ່ອນ');
             }
 
-            $this->savePayment($data);
+            // Additional validation
+            $this->validatePaymentData($data);
+
+            // Prepare payment data
+            $this->preparePaymentData($data);
+
+            // Show confirmation modal
+            $this->showConfirmModal = true;
+
         } catch (\Exception $e) {
             Notification::make()
                 ->title('ເກີດຂໍ້ຜິດພາດ')
@@ -365,64 +423,169 @@ class PaymentPage extends Page implements HasForms
     }
 
     /**
-     * ບັນທຶກຂໍ້ມູນການຊຳລະ
+     * Validate payment data
      */
-    private function savePayment(array $data): void
+    private function validatePaymentData(array $data): void
     {
-        // ສ້າງ Payment record
+        // Check if at least one payment type is entered
+        $cash = Money::toInt($data['cash'] ?? 0);
+        $transfer = Money::toInt($data['transfer'] ?? 0);
+        $foodMoney = Money::toInt($data['food_money'] ?? 0);
+
+        if ($cash == 0 && $transfer == 0 && $foodMoney == 0) {
+            throw new \Exception('ກະລຸນາປ້ອນຈຳນວນເງິນທີ່ຈະຊຳລະ');
+        }
+
+        // Check total amount
+        if (($data['total_amount'] ?? 0) <= 0) {
+            throw new \Exception('ຈຳນວນເງິນລວມຕ້ອງມາກກວ່າ 0');
+        }
+
+        // Validate months
+        if (empty($data['tuition_months']) && empty($data['food_months'])) {
+            throw new \Exception('ກະລຸນາເລືອກເດືອນທີ່ຈະຊຳລະ');
+        }
+    }
+
+    /**
+     * Prepare payment data for confirmation
+     */
+    private function preparePaymentData(array $data): void
+    {
         $this->pendingPaymentData = [
             "student_id" => $this->selectedStudent->student_id,
-            "academic_year_id" => 1,
-            "payment_date" => now(),
-            "receipt_number" => $data["receipt_number"] ?? 0,
-            "cash" => $data['cash'],
-            "transfer" => $data['transfer'],
-            "food_money" => $data['food_money'],
-            "tuition_months" => json_encode($data['tuition_months']),
-            "food_months" => json_encode($data['food_months']),
-            "discount_id" => $data['discount_id'] ?? 0,
+            "academic_year_id" => 1, // ຄວນດຶງຈາກການຕັ້ງຄ່າລະບົບ
+            "payment_date" => $data['payment_date'] ?? now(),
+            "receipt_number" => $data["receipt_number"] ?? 'PAY-' . now()->format('YmdHis'),
+            "cash" => Money::toInt($data['cash'] ?? 0),
+            "transfer" => Money::toInt($data['transfer'] ?? 0),
+            "food_money" => Money::toInt($data['food_money'] ?? 0),
+            "tuition_months" => json_encode($data['tuition_months'] ?? []),
+            "food_months" => json_encode($data['food_months'] ?? []),
+            "discount_id" => $data['discount_id'] ?? null,
             "discount_amount" => $data['discount_amount'] ?? 0,
             "total_amount" => $data['total_amount'] ?? 0,
-            "late_fee" => $data['late_fee'] ?? 0,
+            "late_fee" => Money::toInt($data['late_fee'] ?? 0),
             "note" => $data['note'] ?? null,
             'received_by' => auth()->id(),
             "payment_status" => "pending",
+            "image_paths" => $data['image_path'] ?? [],
         ];
-
-        // dd($saveData);
-
-        // ສະແດງ confirmation modal
-        $this->dispatch('open-modal', id: 'confirm-payment-modal');
-
-        // $payment = Payment::create($saveData);
-
-        // if (!empty($data['image_path'])) {
-        //     // ຖ້າມີຫຼາຍຮູບ (array)
-        //     if (is_array($data['image_path'])) {
-        //         foreach ($data['image_path'] as $imagePath) {
-        //             $payment->images()->create([
-        //                 'image_path' => $imagePath,
-        //                 'upload_date' => now()
-        //             ]);
-        //         }
-        //     } else {
-        //         // ຮູບດຽວ
-        //         $payment->images()->create([
-        //             'image_path' => $data['image_path'],
-        //             'upload_date' => now()
-        //         ]);
-        //     }
-        // }
-
-        // Notification::make()
-        //     ->title('ສຳເລັດ')
-        //     ->body('ບັນທຶກການຊຳລະເງິນສຳເລັດແລ້ວ')
-        //     ->success()
-        //     ->send();
     }
 
-    private function confirmPayment()
+    /**
+     * Confirm and save payment
+     */
+    public function confirmPayment(): void
     {
-        dd("hello");
+        try {
+            DB::beginTransaction();
+
+            // Create payment record
+            $payment = Payment::create([
+                "student_id" => $this->pendingPaymentData['student_id'],
+                "academic_year_id" => $this->pendingPaymentData['academic_year_id'],
+                "payment_date" => $this->pendingPaymentData['payment_date'],
+                "receipt_number" => $this->pendingPaymentData['receipt_number'],
+                "cash" => $this->pendingPaymentData['cash'],
+                "transfer" => $this->pendingPaymentData['transfer'],
+                "food_money" => $this->pendingPaymentData['food_money'],
+                "tuition_months" => $this->pendingPaymentData['tuition_months'],
+                "food_months" => $this->pendingPaymentData['food_months'],
+                "discount_id" => $this->pendingPaymentData['discount_id'],
+                "discount_amount" => $this->pendingPaymentData['discount_amount'],
+                "total_amount" => $this->pendingPaymentData['total_amount'],
+                "late_fee" => $this->pendingPaymentData['late_fee'],
+                "note" => $this->pendingPaymentData['note'],
+                "received_by" => $this->pendingPaymentData['received_by'],
+                "payment_status" => "confirmed",
+            ]);
+
+            // Save payment images if any
+            if (!empty($this->pendingPaymentData['image_paths'])) {
+                foreach ($this->pendingPaymentData['image_paths'] as $imagePath) {
+                    PaymentImage::create([
+                        'payment_id' => $payment->payment_id,
+                        'image_path' => $imagePath,
+                        'upload_date' => now()
+                    ]);
+                }
+            }
+
+            DB::commit();
+
+            // Close modal
+            $this->showConfirmModal = false;
+            $this->pendingPaymentData = [];
+
+            // Reset form
+            $this->resetForm();
+
+            Notification::make()
+                ->title('ສຳເລັດ!')
+                ->body('ບັນທຶກການຊຳລະເງິນສຳເລັດແລ້ວ')
+                ->success()
+                ->send();
+
+            // Redirect to print receipt or payment list
+            $this->redirect(route('filament.admin.resources.payments.index'));
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            Notification::make()
+                ->title('ເກີດຂໍ້ຜິດພາດ')
+                ->body('ບໍ່ສາມາດບັນທຶກການຊຳລະເງິນໄດ້: ' . $e->getMessage())
+                ->danger()
+                ->send();
+        }
+    }
+
+    /**
+     * Cancel payment confirmation
+     */
+    public function cancelPayment(): void
+    {
+        $this->showConfirmModal = false;
+        $this->pendingPaymentData = [];
+    }
+
+    /**
+     * Reset form after successful payment
+     */
+    private function resetForm(): void
+    {
+        $receiptNo = 'PAY-' . now()->format('YmdHis');
+        $this->form->fill([
+            "receipt_number" => $receiptNo,
+            "receipt_number_view" => $receiptNo,
+            'cash' => 0,
+            'transfer' => 0,
+            'payment_date' => now(),
+            'late_fee' => 0,
+            'food_money' => 0,
+            'tuition_months' => [],
+            'food_months' => [],
+            'discount_id' => 0,
+            'total_amount' => 0,
+            'note' => null,
+            'image_path' => []
+        ]);
+    }
+
+    /**
+     * Get paid tuition months for validation
+     */
+    private function getPaidTuitionMonths(int $studentId): array
+    {
+        return Payment::getPaidTuitionMonths($studentId, 1); // 1 = current academic year
+    }
+
+    /**
+     * Get paid food months for validation
+     */
+    private function getPaidFoodMonths(int $studentId): array
+    {
+        return Payment::getPaidFoodMonths($studentId, 1); // 1 = current academic year
     }
 }

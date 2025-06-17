@@ -122,8 +122,8 @@
                         </div>
                         <div class="">
                             <x-filament::button tag="a"
-                                href="{{ route('filament.admin.resources.students.edit', $selectedStudent) }}"
-                                color="gray" icon="heroicon-m-pencil-square">
+                                href="{{ route('filament.admin.resources.students.edit', $selectedStudent) }}" color="gray"
+                                icon="heroicon-m-pencil-square">
                                 ແກ້ໄຂຂໍ້ມູນ
                             </x-filament::button>
                         </div>
@@ -154,83 +154,137 @@
                 {{-- ສ່ວນຂໍ້ມູນຄ່າທຳນຽມທີ່ຈະຖືກສ້າງໃນອະນາຄົດ --}}
             </x-filament::section>
 
+            <!-- ແກ້ໄຂສ່ວນ Modal ໃນ payment-page.blade.php -->
+
             <!-- Confirmation Modal -->
-            <x-filament::modal id="confirm-payment-modal" width="2xl" icon="heroicon-o-information-circle">
-                <x-slot name="heading">
-                    ຢືນຢັນການຊຳລະເງິນ
-                </x-slot>
-                <x-slot name="description" class="">
-                    @if ($pendingPaymentData)
-                        <div class="space-y-4 w-full">
-                            <!-- ຂໍ້ມູນນັກຮຽນ -->
-                            <div class="p-4 rounded-lg w-full">
-                                <h3 class="font-semibold text-lg mb-2">ຂໍ້ມູນນັກຮຽນ</h3>
-                                <div class="d-flex grap-">
-                                    <span class="font-medium">ຊື່: {{ $selectedStudent->full_name ?? '' }}</span>
-                                    <span class="font-medium">ລະຫັດ: {{ $selectedStudent->student_code ?? '' }}</span>
-                                </div>
-                            </div>
+            @if($showConfirmModal)
+                <div class="fixed inset-0 z-50 overflow-y-auto" x-data="{ show: @entangle('showConfirmModal') }" x-show="show"
+                    x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0"
+                    x-transition:enter-end="opacity-100" x-transition:leave="ease-in duration-200"
+                    x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0">
 
-                            <!-- ລາຍລະອຽດການຊຳລະ -->
-                            <div class="bg-blue-50 p-4 rounded-lg">
-                                <h3 class="font-semibold text-lg mb-2">ລາຍລະອຽດການຊຳລະ</h3>
-                                <div class="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <p><span class="font-medium">ເລກໃບບິນ:</span>
-                                            {{ $pendingPaymentData['receipt_number'] ?? '' }}</p>
-                                        <p><span class="font-medium">ວັນທີ:</span> {{ now()->format('d/m/Y H:i') }}</p>
-                                        <p><span class="font-medium">ເງິນສົດ:</span>
-                                            {{ number_format($pendingPaymentData['cash'] ?? 0) }} ກີບ</p>
-                                        <p><span class="font-medium">ເງິນໂອນ:</span>
-                                            {{ number_format($pendingPaymentData['transfer'] ?? 0) }} ກີບ</p>
-                                    </div>
-                                    <div>
-                                        <p><span class="font-medium">ຄ່າອາຫານ:</span>
-                                            {{ number_format($pendingPaymentData['food_money'] ?? 0) }} ກີບ</p>
-                                        <p><span class="font-medium">ສ່ວນຫຼຸດ:</span>
-                                            {{ number_format($pendingPaymentData['discount_amount'] ?? 0) }} ກີບ</p>
-                                        <p><span class="font-medium">ຄ່າປັບ:</span>
-                                            {{ number_format($pendingPaymentData['late_fee'] ?? 0) }} ກີບ</p>
-                                        <p class="text-lg font-bold text-green-600">
-                                            <span>ລວມທັງໝົດ:</span>
-                                            {{ number_format($pendingPaymentData['total_amount'] ?? 0) }} ກີບ
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- ເດືອນທີ່ຈ່າຍ -->
-                            @if (!empty($pendingPaymentData['tuition_months']))
-                                <div class="bg-green-50 p-4 rounded-lg">
-                                    <h3 class="font-semibold mb-2">ເດືອນຈ່າຍຄ່າຮຽນ</h3>
-                                    <p>{{ implode(', ', json_decode($pendingPaymentData['tuition_months'], true) ?? []) }}
-                                    </p>
-                                </div>
-                            @endif
-
-                            @if (!empty($pendingPaymentData['food_months']))
-                                <div class="bg-yellow-50 p-4 rounded-lg">
-                                    <h3 class="font-semibold mb-2">ເດືອນຈ່າຍຄ່າອາຫານ</h3>
-                                    <p>{{ implode(', ', json_decode($pendingPaymentData['food_months'], true) ?? []) }}
-                                    </p>
-                                </div>
-                            @endif
+                    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+                        <!-- Background overlay -->
+                        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="$wire.cancelPayment()">
                         </div>
-                    @endif
 
-                </x-slot>
+                        <!-- Modal panel -->
+                        <div
+                            class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
+                            <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                                <div class="sm:flex sm:items-start">
+                                    <div
+                                        class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 sm:mx-0 sm:h-10 sm:w-10">
+                                        <x-filament::icon icon="heroicon-o-information-circle" class="h-6 w-6 text-blue-600" />
+                                    </div>
+                                    <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                                        <h3 class="text-lg leading-6 font-medium text-gray-900">
+                                            ຢືນຢັນການຊຳລະເງິນ
+                                        </h3>
+                                        <div class="mt-4">
+                                            @if ($pendingPaymentData)
+                                                <div class="space-y-4 w-full">
+                                                    <!-- ຂໍ້ມູນນັກຮຽນ -->
+                                                    <div class="bg-gray-50 p-4 rounded-lg">
+                                                        <h4 class="font-semibold text-lg mb-2">ຂໍ້ມູນນັກຮຽນ</h4>
+                                                        <div class="grid grid-cols-2 gap-4">
+                                                            <div>
+                                                                <span class="font-medium">ຊື່:
+                                                                    {{ $selectedStudent->getFullName() ?? '' }}</span>
+                                                            </div>
+                                                            <div>
+                                                                <span class="font-medium">ລະຫັດ:
+                                                                    {{ $selectedStudent->student_code ?? '' }}</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
 
-                <x-slot name="footerActions">
-                    <div class="flex justify-end space-x-2">
-                        <x-filament::button color="gray" wire:click="cancelPayment">
-                            ຍົກເລີກ
-                        </x-filament::button>
-                        <x-filament::button color="success" wire:click="confirmPayment">
-                            ຢືນຢັນ ແລະ ພິມໃບບິນ
-                        </x-filament::button>
+                                                    <!-- ລາຍລະອຽດການຊຳລະ -->
+                                                    <div class="bg-blue-50 p-4 rounded-lg">
+                                                        <h4 class="font-semibold text-lg mb-2">ລາຍລະອຽດການຊຳລະ</h4>
+                                                        <div class="grid grid-cols-2 gap-4">
+                                                            <div class="space-y-2">
+                                                                <p><span class="font-medium">ເລກໃບບິນ:</span>
+                                                                    {{ $pendingPaymentData['receipt_number'] ?? '' }}</p>
+                                                                <p><span class="font-medium">ວັນທີ:</span>
+                                                                    {{ isset($pendingPaymentData['payment_date']) ? \Carbon\Carbon::parse($pendingPaymentData['payment_date'])->format('d/m/Y H:i') : now()->format('d/m/Y H:i') }}
+                                                                </p>
+                                                                <p><span class="font-medium">ເງິນສົດ:</span>
+                                                                    {{ number_format($pendingPaymentData['cash'] ?? 0) }} ກີບ</p>
+                                                                <p><span class="font-medium">ເງິນໂອນ:</span>
+                                                                    {{ number_format($pendingPaymentData['transfer'] ?? 0) }} ກີບ
+                                                                </p>
+                                                            </div>
+                                                            <div class="space-y-2">
+                                                                <p><span class="font-medium">ຄ່າອາຫານ:</span>
+                                                                    {{ number_format($pendingPaymentData['food_money'] ?? 0) }} ກີບ
+                                                                </p>
+                                                                <p><span class="font-medium">ສ່ວນຫຼຸດ:</span>
+                                                                    {{ number_format($pendingPaymentData['discount_amount'] ?? 0) }}
+                                                                    ກີບ</p>
+                                                                <p><span class="font-medium">ຄ່າປັບ:</span>
+                                                                    {{ number_format($pendingPaymentData['late_fee'] ?? 0) }} ກີບ
+                                                                </p>
+                                                                <p class="text-lg font-bold text-green-600">
+                                                                    <span>ລວມທັງໝົດ:</span>
+                                                                    {{ number_format($pendingPaymentData['total_amount'] ?? 0) }}
+                                                                    ກີບ
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- ເດືອນທີ່ຈ່າຍ -->
+                                                    @php
+                                                        $tuitionMonths = !empty($pendingPaymentData['tuition_months']) ? json_decode($pendingPaymentData['tuition_months'], true) : [];
+                                                        $foodMonths = !empty($pendingPaymentData['food_months']) ? json_decode($pendingPaymentData['food_months'], true) : [];
+                                                    @endphp
+
+                                                    @if (!empty($tuitionMonths))
+                                                        <div class="bg-green-50 p-4 rounded-lg">
+                                                            <h4 class="font-semibold mb-2">ເດືອນຈ່າຍຄ່າຮຽນ</h4>
+                                                            <p>{{ implode(', ', $tuitionMonths) }}</p>
+                                                        </div>
+                                                    @endif
+
+                                                    @if (!empty($foodMonths))
+                                                        <div class="bg-yellow-50 p-4 rounded-lg">
+                                                            <h4 class="font-semibold mb-2">ເດືອນຈ່າຍຄ່າອາຫານ</h4>
+                                                            <p>{{ implode(', ', $foodMonths) }}</p>
+                                                        </div>
+                                                    @endif
+
+                                                    <!-- ໝາຍເຫດ -->
+                                                    @if (!empty($pendingPaymentData['note']))
+                                                        <div class="bg-gray-50 p-4 rounded-lg">
+                                                            <h4 class="font-semibold mb-2">ໝາຍເຫດ</h4>
+                                                            <p>{{ $pendingPaymentData['note'] }}</p>
+                                                        </div>
+                                                    @endif
+                                                </div>
+                                            @endif
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Modal Footer -->
+                            <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                                <button type="button" wire:click="confirmPayment"
+                                    class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 sm:ml-3 sm:w-auto sm:text-sm">
+                                    <x-filament::icon icon="heroicon-o-check-circle" class="h-5 w-5 mr-2" />
+                                    ຢືນຢັນ ແລະ ພິມໃບບິນ
+                                </button>
+                                <button type="button" wire:click="cancelPayment"
+                                    class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
+                                    <x-filament::icon icon="heroicon-o-x-mark" class="h-5 w-5 mr-2" />
+                                    ຍົກເລີກ
+                                </button>
+                            </div>
+                        </div>
                     </div>
-                </x-slot>
-            </x-filament::modal>
+                </div>
+            @endif
 
             {{-- ສ່ວນປະຫວັດການຊຳລະເງິນ --}}
             <x-filament::section>
@@ -257,8 +311,7 @@
                         ທ່ານສາມາດຄົ້ນຫາໂດຍໃຊ້ລະຫັດນັກຮຽນຫຼືຊື່-ນາມສະກຸນຂອງນັກຮຽນ.
                     </p>
                     <div class="mt-6">
-                        <x-filament::button tag="a"
-                            href="{{ route('filament.admin.resources.payments.index') }}"
+                        <x-filament::button tag="a" href="{{ route('filament.admin.resources.payments.index') }}"
                             icon="heroicon-m-arrow-left" color="gray">
                             ກັບໄປໜ້າຫຼັກຄ່າທຳນຽມ
                         </x-filament::button>
