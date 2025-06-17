@@ -55,6 +55,9 @@ class PaymentPage extends Page implements HasForms
     public $pendingPaymentData = [];
     public $showConfirmModal = false;
 
+    public array $paidTuitionMonths = [];
+    public array $paidFoodMonths = [];
+
     /**
      * ເລີ່ມຕົ້ນເມື່ອໂຫຼດໜ້າ
      */
@@ -85,6 +88,34 @@ class PaymentPage extends Page implements HasForms
         ]);
     }
 
+    private function getAvailableTuitionMonths(): array
+    {
+        $months = Payment::getMonthOptions();
+
+        // ✅ ເພີ່ມສັນຍາລັກໃຫ້ເດືອນທີ່ຈ່າຍແລ້ວ
+        foreach ($this->paidTuitionMonths as $paidMonth) {
+            if (isset($months[$paidMonth])) {
+                $months[$paidMonth] .= ' ✅ (ຈ່າຍແລ້ວ)';
+            }
+        }
+
+        return $months;
+    }
+
+    private function getAvailableFoodMonths(): array
+    {
+        $months = Payment::getMonthOptions();
+
+        // ✅ ເພີ່ມສັນຍາລັກໃຫ້ເດືອນທີ່ຈ່າຍແລ້ວ
+        foreach ($this->paidFoodMonths as $paidMonth) {
+            if (isset($months[$paidMonth])) {
+                $months[$paidMonth] .= ' ✅ (ຈ່າຍແລ້ວ)';
+            }
+        }
+
+        return $months;
+    }
+
     public function form(Form $form): Form
     {
         return $form
@@ -97,7 +128,8 @@ class PaymentPage extends Page implements HasForms
                             ->schema([
                                 CheckboxList::make('tuition_months')
                                     ->hiddenLabel()
-                                    ->options(Payment::getMonthOptions())
+                                    ->options($this->getAvailableTuitionMonths())
+                                    ->disableOptionWhen(fn(string $value): bool => in_array($value, $this->paidTuitionMonths))
                                     ->columns(3)
                                     ->columnSpanFull()
                                     ->required()
@@ -132,7 +164,8 @@ class PaymentPage extends Page implements HasForms
                             ->schema([
                                 CheckboxList::make('food_months')
                                     ->hiddenLabel()
-                                    ->options(Payment::getMonthOptions())
+                                    ->options($this->getAvailableFoodMonths())
+                                    ->disableOptionWhen(fn(string $value): bool => in_array($value, $this->paidFoodMonths))
                                     ->columns(3)
                                     ->columnSpanFull()
                                     ->live()
@@ -471,6 +504,14 @@ class PaymentPage extends Page implements HasForms
 
         if ($this->selectedStudent) {
             $this->profile_image = $this->selectedStudent->profile_image;
+            $this->paidTuitionMonths = Payment::getPaidTuitionMonths(
+                $this->selectedStudent->student_id,
+                $this->currentAcademicYear?->academic_year_id
+            );
+            $this->paidFoodMonths = Payment::getPaidFoodMonths(
+                $this->selectedStudent->student_id,
+                $this->currentAcademicYear?->academic_year_id
+            );
             $this->resetSearchInterface();
             $this->notifyStudentSelected();
         }
@@ -544,7 +585,7 @@ class PaymentPage extends Page implements HasForms
             $this->preparePaymentData($data);
 
             // Show confirmation modal
-            $this->showConfirmModal = true;
+            // $this->showConfirmModal = true;
 
         } catch (\Exception $e) {
             Notification::make()
@@ -607,8 +648,8 @@ class PaymentPage extends Page implements HasForms
             "cash" => $this->parseAmount($data['cash'] ?? 0),
             "transfer" => $this->parseAmount($data['transfer'] ?? 0),
             "food_money" => $this->parseAmount($data['food_money'] ?? 0),
-            "tuition_months" => json_encode($data['tuition_months'] ?? []),
-            "food_months" => json_encode($data['food_months'] ?? []),
+            "tuition_months" => $data['tuition_months'] ?? [],      // ✅ ລຶບ json_encode
+            "food_months" => $data['food_months'] ?? [],            // ✅ ລຶບ json_encode
             "discount_id" => $data['discount_id'] ?? null,
             "discount_amount" => $this->parseAmount($data['discount_amount'] ?? 0),
             "total_amount" => $this->parseAmount($data['total_amount'] ?? 0),
@@ -793,6 +834,8 @@ class PaymentPage extends Page implements HasForms
         $this->profile_image = null;
         $this->search_val = '';
         $this->foundStudents = collect();
+        $this->paidTuitionMonths = []; // ✅ ເພີ່ມ
+        $this->paidFoodMonths = [];    // ✅ ເພີ່ມ
         $this->resetForm();
 
         Notification::make()

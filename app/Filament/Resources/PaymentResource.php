@@ -4,23 +4,15 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\PaymentResource\Pages;
 use App\Models\Payment;
-use App\Models\Student;
 use App\Models\AcademicYear;
-use App\Models\Discount;
-use App\Models\User;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Tables\Actions\ActionGroup;
-use Filament\Tables\Filters\SelectFilter;
-use Filament\Tables\Filters\Filter;
-use Filament\Forms\Components\DatePicker;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Filament\Support\Enums\FontWeight;
-use Filament\Tables\Enums\FiltersLayout;
 use Filament\Infolists\Infolist;
 use Filament\Infolists\Components\Section;
 use Filament\Infolists\Components\TextEntry;
@@ -174,7 +166,7 @@ class PaymentResource extends Resource
                     ->schema([
                         Forms\Components\Select::make('received_by')
                             ->label('ຜູ້ຮັບເງິນ')
-                            ->relationship('receiver', 'name')
+                            ->relationship('receiver', 'username')
                             ->default(auth()->id())
                             ->required()
                             ->searchable()
@@ -269,7 +261,7 @@ class PaymentResource extends Resource
                     ->getStateUsing(fn(Payment $record): string => $record->getFoodMonthsAsNumbers())
                     ->wrap(),
 
-                Tables\Columns\TextColumn::make('receiver.name')
+                Tables\Columns\TextColumn::make('receiver.username')
                     ->label('ຜູ້ຮັບເງິນ')
                     ->toggleable(isToggledHiddenByDefault: true),
 
@@ -425,7 +417,7 @@ class PaymentResource extends Resource
 
                 Section::make('ຂໍ້ມູນເພີ່ມເຕີມ')
                     ->schema([
-                        TextEntry::make('receiver.name')
+                        TextEntry::make('receiver.username')
                             ->label('ຜູ້ຮັບເງິນ'),
 
                         TextEntry::make('note')

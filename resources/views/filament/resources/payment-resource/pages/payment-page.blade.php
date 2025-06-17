@@ -236,23 +236,32 @@
 
                                                     <!-- ເດືອນທີ່ຈ່າຍ -->
                                                     @php
-                                                        $tuitionMonths = !empty($pendingPaymentData['tuition_months']) ? json_decode($pendingPaymentData['tuition_months'], true) : [];
-                                                        $foodMonths = !empty($pendingPaymentData['food_months']) ? json_decode($pendingPaymentData['food_months'], true) : [];
+                                                        // ✅ ກວດສອບປະເພດຂໍ້ມູນກ່ອນ
+                                                        $tuitionMonths = [];
+                                                        $foodMonths = [];
+
+                                                        if (!empty($pendingPaymentData['tuition_months'])) {
+                                                            if (is_array($pendingPaymentData['tuition_months'])) {
+                                                                $tuitionMonths = $pendingPaymentData['tuition_months'];
+                                                            } elseif (is_string($pendingPaymentData['tuition_months'])) {
+                                                                $tuitionMonths = json_decode($pendingPaymentData['tuition_months'], true) ?: [];
+                                                            }
+                                                        }
+
+                                                        if (!empty($pendingPaymentData['food_months'])) {
+                                                            if (is_array($pendingPaymentData['food_months'])) {
+                                                                $foodMonths = $pendingPaymentData['food_months'];
+                                                            } elseif (is_string($pendingPaymentData['food_months'])) {
+                                                                $foodMonths = json_decode($pendingPaymentData['food_months'], true) ?: [];
+                                                            }
+                                                        }
+
+                                                        // ແປງເປັນຊື່ເດືອນ
+                                                        $tuitionMonthNames = array_map(fn($month) => \App\Models\Payment::getMonthName($month), $tuitionMonths);
+                                                        $foodMonthNames = array_map(fn($month) => \App\Models\Payment::getMonthName($month), $foodMonths);
                                                     @endphp
 
-                                                    @if (!empty($tuitionMonths))
-                                                        <div class="bg-green-50 p-4 rounded-lg">
-                                                            <h4 class="font-semibold mb-2">ເດືອນຈ່າຍຄ່າຮຽນ</h4>
-                                                            <p>{{ implode(', ', $tuitionMonths) }}</p>
-                                                        </div>
-                                                    @endif
 
-                                                    @if (!empty($foodMonths))
-                                                        <div class="bg-yellow-50 p-4 rounded-lg">
-                                                            <h4 class="font-semibold mb-2">ເດືອນຈ່າຍຄ່າອາຫານ</h4>
-                                                            <p>{{ implode(', ', $foodMonths) }}</p>
-                                                        </div>
-                                                    @endif
 
                                                     <!-- ໝາຍເຫດ -->
                                                     @if (!empty($pendingPaymentData['note']))
