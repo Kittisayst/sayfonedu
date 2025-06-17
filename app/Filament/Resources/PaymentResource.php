@@ -5,7 +5,6 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\PaymentResource\Pages;
 use App\Models\Payment;
 use App\Models\AcademicYear;
-use App\Models\PaymentImage;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -19,7 +18,6 @@ use Filament\Infolists\Components\Section;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Infolists\Components\ImageEntry;
 use Filament\Support\Colors\Color;
-use Illuminate\Support\Facades\Storage;
 
 class PaymentResource extends Resource
 {
@@ -336,9 +334,6 @@ class PaymentResource extends Resource
     /**
      * ✅ ຂໍ້ມູນລະອຽດສຳລັບການເບິ່ງ - ໃຊ້ Model methods
      */
-    /**
-     * ✅ ປັບປຸງ infolist ໃນ PaymentResource.php ສຳລັບການສະແດງຮູບພາບ
-     */
     public static function infolist(Infolist $infolist): Infolist
     {
         return $infolist
@@ -408,10 +403,12 @@ class PaymentResource extends Resource
 
                 Section::make('ເດືອນທີ່ຊຳລະ')
                     ->schema([
+                        // ✅ ໃຊ້ Model method getTuitionMonthsDisplay()
                         TextEntry::make('tuition_months')
                             ->label('ເດືອນຄ່າຮຽນ')
                             ->getStateUsing(fn(Payment $record): string => $record->getTuitionMonthsDisplay()),
 
+                        // ✅ ໃຊ້ Model method getFoodMonthsDisplay()
                         TextEntry::make('food_months')
                             ->label('ເດືອນຄ່າອາຫານ')
                             ->getStateUsing(fn(Payment $record): string => $record->getFoodMonthsDisplay()),
@@ -426,124 +423,14 @@ class PaymentResource extends Resource
                         TextEntry::make('note')
                             ->label('ໝາຍເຫດ')
                             ->placeholder('ບໍ່ມີໝາຍເຫດ'),
+
+                        ImageEntry::make('images.image_path')
+                            ->label('ຮູບໃບບິນ')
+                            ->disk('public')
+                            ->height(200)
+                            ->width(200),
                     ])
                     ->columns(2),
-
-                // ✅ ສ່ວນສະແດງຮູບພາບທີ່ຖືກຕ້ອງ
-                Section::make('ຮູບໃບບິນ/ໃບໂອນ')
-                    ->schema([
-                        TextEntry::make('payment_images')
-                            ->label('')
-                            ->getStateUsing(function (Payment $record): string {
-                                if ($record->images->isEmpty()) {
-                                    return 'ບໍ່ມີຮູບພາບ';
-                                }
-
-                                $imagesHtml = '';
-                                foreach ($record->images as $image) {
-                                    $imageUrl = Storage::disk('public')->url($image->image_path);
-                                    $imageType = $image->getImageTypeLabel();
-
-                                    $imagesHtml .= "
-                                    <div class='inline-block m-2 p-2 border rounded-lg bg-gray-50'>
-                                        <div class='text-xs text-gray-600 mb-1'>{$imageType}</div>
-                                        <img src='{$imageUrl}' 
-                                             alt='Payment Image' 
-                                             class='w-32 h-32 object-cover rounded cursor-pointer hover:opacity-80 transition-opacity'
-                                             onclick='window.open(\"{$imageUrl}\", \"_blank\")'
-                                             style='max-width: 200px; max-height: 200px;'
-                                        />
-                                        <div class='text-xs text-gray-500 mt-1'>{$image->getFormattedFileSizeAttribute()}</div>
-                                    </div>
-                                ";
-                                }
-
-                                return $imagesHtml;
-                            })
-                            ->html() // ✅ ສຳຄັນ: ໃຊ້ html() ເພື່ອສະແດງ HTML
-                            ->columnSpanFull(),
-                    ])
-                    ->visible(fn(Payment $record): bool => $record->images->isNotEmpty())
-                    ->collapsible(),
-            ]);
-    }
-
-    /**
-     * ✅ ວິທີທີ 2: ໃຊ້ Custom View Component (ແນະນຳ)
-     */
-    public static function infolistAlternative(Infolist $infolist): Infolist
-    {
-        return $infolist
-            ->schema([
-                // ... ສ່ວນອື່ນໆ ເຄີຍ ...
-
-                Section::make('ຮູບໃບບິນ/ໃບໂອນ')
-                    ->schema([
-                        // ✅ ໃຊ້ ImageEntry ທີ່ຖືກຕ້ອງ
-                        \Filament\Infolists\Components\ViewEntry::make('payment_images')
-                            ->label('')
-                            ->view('filament.components.payment-images')
-                            ->viewData(fn(Payment $record) => [
-                                'images' => $record->images,
-                            ])
-                            ->columnSpanFull(),
-                    ])
-                    ->visible(fn(Payment $record): bool => $record->images->isNotEmpty())
-                    ->collapsible(),
-            ]);
-    }
-
-    /**
-     * ✅ ວິທີທີ 3: ໃຊ້ RepeatableEntry (ສຳລັບຫຼາຍຮູບ)
-     */
-    public static function infolistWithRepeatable(Infolist $infolist): Infolist
-    {
-        return $infolist
-            ->schema([
-                // ... ສ່ວນອື່ນໆ ...
-
-                Section::make('ຮູບໃບບິນ/ໃບໂອນ')
-                    ->schema([
-                        \Filament\Infolists\Components\RepeatableEntry::make('images')
-                            ->label('')
-                            ->schema([
-                                TextEntry::make('image_type')
-                                    ->label('ປະເພດ')
-                                    ->getStateUsing(fn(PaymentImage $record): string => $record->getImageTypeLabel())
-                                    ->badge()
-                                    ->color(fn(string $state): string => match ($state) {
-                                        'ໃບໂອນເງິນ' => 'info',
-                                        'ໃບບິນ' => 'success',
-                                        default => 'gray'
-                                    }),
-
-                                TextEntry::make('image_preview')
-                                    ->label('ຮູບພາບ')
-                                    ->getStateUsing(function (PaymentImage $record): string {
-                                        $imageUrl = Storage::disk('public')->url($record->image_path);
-                                        return "
-                                        <img src='{$imageUrl}' 
-                                             alt='Payment Image' 
-                                             class='w-48 h-32 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity'
-                                             onclick='window.open(\"{$imageUrl}\", \"_blank\")'
-                                        />
-                                    ";
-                                    })
-                                    ->html(),
-
-                                TextEntry::make('file_info')
-                                    ->label('ຂໍ້ມູນໄຟລ໌')
-                                    ->getStateUsing(function (PaymentImage $record): string {
-                                        return "ຂະໜາດ: {$record->getFormattedFileSizeAttribute()}<br>
-                                            ອັບໂຫຼດ: {$record->upload_date->format('d/m/Y H:i')}";
-                                    })
-                                    ->html(),
-                            ])
-                            ->columns(3)
-                            ->columnSpanFull(),
-                    ])
-                    ->visible(fn(Payment $record): bool => $record->images->isNotEmpty())
-                    ->collapsible(),
             ]);
     }
 
