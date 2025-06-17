@@ -842,109 +842,111 @@ class PaymentPage extends Page implements HasForms, HasTable
     }
 
     /**
-     * ✅ ເພີ່ມ method ສຳລັບການບັນທຶກຮູບພາບ
+     * ✅ ບັນທຶກຮູບພາບການຊຳລະເງິນ (ໃຊ້ PaymentImage model)
      */
     private function savePaymentImages(Payment $payment): void
     {
         try {
-            // ດຶງຮູບພາບຈາກ form data
-            $formData = $this->form->getState();
-            $imagePaths = $formData['image_path'] ?? [];
+            // ✅ ດຶງຮູບພາບຈາກ form data ຫຼື pending data
+            $imagePaths = $this->pendingPaymentData['image_paths'] ??
+                $this->form->getState()['image_path'] ?? [];
 
-            if (empty($imagePaths) || !is_array($imagePaths)) {
-                Log::info('No images to save for payment', ['payment_id' => $payment->payment_id]);
+            if (empty($imagePaths)) {
+                Log::info('No images to save', ['payment_id' => $payment->payment_id]);
                 return;
             }
 
-            foreach ($imagePaths as $imagePath) {
-                if (empty($imagePath) || !is_string($imagePath)) {
-                    continue;
-                }
+            $results = ['success' => 0, 'failed' => 0, 'errors' => []];
 
-                // ກວດສອບວ່າໄຟລ์ມີຢູ່ຈິງ
-                if (!Storage::disk('public')->exists($imagePath)) {
-                    Log::warning('Image file not found', [
+            foreach ($imagePaths as $index => $imagePath) {
+                try {
+                    // ✅ ໃຊ້ validation ຈາກ model
+                    if (!$this->validateSingleImage($imagePath, $index + 1, $results)) {
+                        continue;
+                    }
+
+                    // ✅ ສ້າງ PaymentImage ດ້ວຍ model
+                    $paymentImage = PaymentImage::create([
                         'payment_id' => $payment->payment_id,
-                        'image_path' => $imagePath
+                        'image_path' => $imagePath,
+                        'image_type' => $this->determineImageType($imagePath),
+                        'upload_date' => now(),
                     ]);
-                    continue;
+
+                    $results['success']++;
+
+                    Log::info('Image saved', [
+                        'payment_id' => $payment->payment_id,
+                        'image_id' => $paymentImage->image_id,
+                        'type' => $paymentImage->image_type
+                    ]);
+
+                } catch (\Exception $e) {
+                    $results['failed']++;
+                    $results['errors'][] = "ຮູບທີ່ " . ($index + 1) . ": " . $e->getMessage();
+                    Log::error('Failed to save image', ['error' => $e->getMessage()]);
                 }
-
-                // ດຶງຂໍ້ມູນໄຟລ์
-                $fileInfo = $this->getFileInfo($imagePath);
-
-                // ບັນທຶກລາຍການຮູບພາບ
-                $paymentImage = PaymentImage::create([
-                    'payment_id' => $payment->payment_id,
-                    'image_path' => $imagePath,
-                    'image_type' => $this->determineImageType($imagePath),
-                    'file_size' => $fileInfo['size'],
-                    'mime_type' => $fileInfo['mime_type'],
-                    'upload_date' => now(),
-                ]);
-
-                Log::info('Payment image saved successfully', [
-                    'payment_id' => $payment->payment_id,
-                    'image_id' => $paymentImage->image_id,
-                    'image_path' => $imagePath,
-                    'file_size' => $fileInfo['size']
-                ]);
             }
 
-        } catch (\Exception $e) {
-            Log::error('Error saving payment images: ' . $e->getMessage(), [
-                'payment_id' => $payment->payment_id,
-                'trace' => $e->getTraceAsString()
-            ]);
+            // ✅ ສົ່ງ notification ຕາມຜົນ
+            $this->notifyImageResults($results);
 
-            // ບໍ່ throw exception ເພື່ອບໍ່ໃຫ້ການບັນທຶກ payment ລົ້ມແຫຼວ
-            // ແຕ່ສົ່ງ notification ແຈ້ງເຕືອນ
+        } catch (\Exception $e) {
+            Log::error('Critical error in savePaymentImages: ' . $e->getMessage());
+
             Notification::make()
-                ->title('ເຕືອນ')
-                ->body('ບັນທຶກການຊຳລະສຳເລັດ ແຕ່ມີບັນຫາໃນການບັນທຶກຮູບພາບບາງຮູບ')
-                ->warning()
+                ->title('ບັນຫາການບັນທຶກຮູບພາບ')
+                ->body('ກະລຸນາລອງໃໝ່ ຫຼື ຕິດຕໍ່ຜູ້ດູແລ')
+                ->danger()
                 ->send();
         }
     }
 
     /**
-     * ✅ ດຶງຂໍ້ມູນໄຟລ์
+     * ✅ ກວດສອບຮູບພາບແຕ່ລະຮູບ
      */
-    private function getFileInfo(string $imagePath): array
+    private function validateSingleImage(string $imagePath, int $imageNumber, array &$results): bool
     {
-        try {
-            $fullPath = Storage::disk('public')->path($imagePath);
-            $size = Storage::disk('public')->size($imagePath);
-            $mimeType = Storage::disk('public')->mimeType($imagePath);
-
-            return [
-                'size' => $size,
-                'mime_type' => $mimeType,
-                'extension' => pathinfo($imagePath, PATHINFO_EXTENSION)
-            ];
-
-        } catch (\Exception $e) {
-            Log::warning('Could not get file info', [
-                'image_path' => $imagePath,
-                'error' => $e->getMessage()
-            ]);
-
-            return [
-                'size' => 0,
-                'mime_type' => 'unknown',
-                'extension' => 'unknown'
-            ];
+        if (empty($imagePath)) {
+            $results['failed']++;
+            $results['errors'][] = "ຮູບທີ່ {$imageNumber}: ບໍ່ມີຂໍ້ມູນ";
+            return false;
         }
+
+        if (!Storage::disk('public')->exists($imagePath)) {
+            $results['failed']++;
+            $results['errors'][] = "ຮູບທີ່ {$imageNumber}: ບໍ່ພົບໄຟລ໌";
+            return false;
+        }
+
+        // ✅ ກວດສອບຂະໜາດ (5MB)
+        $fileSize = Storage::disk('public')->size($imagePath);
+        if ($fileSize > 5242880) {
+            $results['failed']++;
+            $results['errors'][] = "ຮູບທີ່ {$imageNumber}: ໄຟລ໌ໃຫຍ່ເກີນ 5MB";
+            return false;
+        }
+
+        // ✅ ກວດສອບປະເພດໄຟລ໌
+        $mimeType = Storage::disk('public')->mimeType($imagePath);
+        $allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
+
+        if (!in_array($mimeType, $allowedTypes)) {
+            $results['failed']++;
+            $results['errors'][] = "ຮູບທີ່ {$imageNumber}: ປະເພດໄຟລ໌ບໍ່ຖືກຕ້ອງ";
+            return false;
+        }
+
+        return true;
     }
 
     /**
-     * ✅ ກຳນົດປະເພດຮູບພາບຕາມຊື່ໄຟລ์
+     * ✅ ກຳນົດປະເພດຮູບພາບ (ໃຊ້ຮ່ວມກັບ PaymentImage model)
      */
     private function determineImageType(string $imagePath): string
     {
         $fileName = strtolower(basename($imagePath));
 
-        // ກວດສອບຈາກຊື່ໄຟລ์
         if (str_contains($fileName, 'transfer') || str_contains($fileName, 'ໂອນ')) {
             return 'transfer_slip';
         }
@@ -953,8 +955,41 @@ class PaymentPage extends Page implements HasForms, HasTable
             return 'receipt';
         }
 
-        // default ເປັນໃບບິນ
-        return 'receipt';
+        return 'receipt'; // default
+    }
+
+    /**
+     * ✅ ສົ່ງ notification ຕາມຜົນ
+     */
+    private function notifyImageResults(array $results): void
+    {
+        $total = $results['success'] + $results['failed'];
+
+        if ($results['failed'] === 0 && $results['success'] > 0) {
+            Notification::make()
+                ->title('ບັນທຶກຮູບພາບສຳເລັດ')
+                ->body("ບັນທຶກຮູບພາບທັງໝົດ {$results['success']} ຮູບສຳເລັດ")
+                ->success()
+                ->send();
+
+        } elseif ($results['success'] > 0 && $results['failed'] > 0) {
+            $errorMsg = implode(', ', array_slice($results['errors'], 0, 2));
+
+            Notification::make()
+                ->title('ບັນທຶກບາງສ່ວນ')
+                ->body("ສຳເລັດ: {$results['success']}, ລົ້ມແຫຼວ: {$results['failed']}. {$errorMsg}")
+                ->warning()
+                ->send();
+
+        } elseif ($results['failed'] > 0) {
+            $errorMsg = implode(', ', array_slice($results['errors'], 0, 2));
+
+            Notification::make()
+                ->title('ບັນທຶກຮູບພາບລົ້ມແຫຼວ')
+                ->body($errorMsg)
+                ->danger()
+                ->send();
+        }
     }
 
     /**
