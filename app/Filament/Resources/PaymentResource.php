@@ -497,55 +497,21 @@ class PaymentResource extends Resource
                     ->description('ຮູບພາບໃບເສັດ ຫຼື ໃບບິນ')
                     ->icon('heroicon-o-photo')
                     ->schema([
-                        // ກວດສອບຂໍ້ມູນກ່ອນ
-                        TextEntry::make('debug_images')
-                            ->label('Debug ຂໍ້ມູນຮູບພາບ')
-                            ->getStateUsing(function (Payment $record): string {
-                                $count = $record->images()->count();
-                                $paths = $record->images()->pluck('image_path')->toArray();
-
-                                return "ຈຳນວນຮູບພາບ: {$count}\nPath: " . implode(', ', $paths);
-                            })
-                            ->visible(fn(): bool => config('app.debug', false)),
-
+                        // ImageEntry - ໃຊ້ asset() ແທນ
                         ImageEntry::make('payment_images')
-                            ->label('')
-                            ->height(150)
-                            ->width(200)
-                            ->extraImgAttributes(['class' => 'rounded-lg shadow-md cursor-pointer'])
-                            ->getStateUsing(function (Payment $record) {
-                                // ທົດສອບແບບງ່າຍກ່ອນ
-                                $imagePaths = $record->images()->pluck('image_path')->toArray();
-
-                                // ເພີ່ມ base URL ຖ້າຈຳເປັນ
-                                return array_map(function ($path) {
-                                    // ຖ້າ path ບໍ່ມີ storage/app/public ໃຫ້ເພີ່ມ
-                                    if (!str_starts_with($path, 'http') && !str_starts_with($path, '/storage')) {
-                                        return '/storage/' . $path;
-                                    }
-                                    return $path;
-                                }, $imagePaths);
+                            ->label('ຮູບພາບການຊຳລະ')
+                            ->height(500)
+                            ->width(300)
+                            ->extraImgAttributes([
+                                'class' => 'rounded-lg shadow-md object-cover',
+                                'loading' => 'lazy'
+                            ])
+                            ->state(function (Payment $record) {
+                                // ໃຊ້ asset() ແທນ Storage::url()
+                                return $record->images->map(function ($image) {
+                                    return asset('storage/' . $image->image_path);
+                                })->values()->toArray();
                             })
-                            ->visible(fn(Payment $record): bool => $record->images()->count() > 0),
-
-                        // ເພີ່ມຂໍ້ມູນລາຍລະອຽດຮູບພາບ
-                        TextEntry::make('image_details')
-                            ->label('ລາຍລະອຽດຮູບພາບ')
-                            ->formatStateUsing(function (Payment $record): string {
-                                $images = $record->images;
-
-                                if ($images->isEmpty()) {
-                                    return 'ບໍ່ມີຮູບພາບ';
-                                }
-
-                                $details = [];
-                                foreach ($images as $image) {
-                                    $details[] = "📄 " . basename($image->image_path);
-                                }
-
-                                return implode("\n", $details);
-                            })
-                            ->html()
                             ->visible(fn(Payment $record): bool => $record->images()->count() > 0),
                     ])
                     ->visible(fn(Payment $record): bool => $record->images()->count() > 0)

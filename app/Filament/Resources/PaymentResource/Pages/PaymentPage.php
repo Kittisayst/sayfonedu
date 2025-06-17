@@ -275,20 +275,33 @@ class PaymentPage extends Page implements HasForms, HasTable
 
                                 FileUpload::make('image_path')
                                     ->label("ຮູບໃບໂອນ/ໃບບິນ")
-                                    ->disk('public')
-                                    ->directory('payment_receipts')
-                                    ->visibility('public')
-                                    ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/jpg'])
+                                    ->disk('public') // ໃຊ້ public disk
+                                    ->directory('payment_receipts') // ໂຟນເດີໃສ່ໄຟລ์
+                                    ->visibility('public') // ຕັ້ງໃຫ້ເປັນ public
+                                    ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/jpg', 'image/webp'])
                                     ->maxSize(5120) // 5MB
-                                    ->imagePreviewHeight('100')
-                                    ->multiple()
+                                    ->imagePreviewHeight('150')
+                                    ->multiple(true) // ອະນຸຍາດຫຼາຍຮູບ
                                     ->maxFiles(3)
-                                    ->helperText('ອັບໂຫຼດໄດ້ສູງສຸດ 3 ຮູບ, ແຕ່ລະຮູບບໍ່ເກີນ 5MB')
+                                    ->reorderable(true) // ສາມາດຈັດລຳດັບໄດ້
+                                    ->previewable(true) // ສາມາດເບິ່ງຕົວຢ່າງໄດ້
+                                    ->downloadable(true) // ສາມາດດາວໂຫລດໄດ້
+                                    ->helperText('ອັບໂຫຼດໄດ້ສູງສຸດ 3 ຮູບ, ແຕ່ລະຮູບບໍ່ເກີນ 5MB (PNG, JPG, JPEG, WEBP)')
+                                    ->columnSpanFull()
                                     ->deleteUploadedFileUsing(function ($file) {
+                                        // ລົບໄຟລ์ອອກຈາກ storage
                                         if (Storage::disk('public')->exists($file)) {
                                             Storage::disk('public')->delete($file);
+                                            return true;
                                         }
-                                    }),
+                                        return false;
+                                    })
+                                    ->getUploadedFileNameForStorageUsing(function ($file) {
+                                        // ສ້າງຊື່ໄຟລ์ໃໝ່ທີ່ບໍ່ຊ້ອນກັນ
+                                        $extension = $file->getClientOriginalExtension();
+                                        $fileName = time() . '_' . uniqid() . '.' . $extension;
+                                        return $fileName;
+                                    })
                             ])
                             ->columns(1)
                             ->columnSpan(1),
