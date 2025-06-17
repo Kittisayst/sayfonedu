@@ -11,7 +11,8 @@ use Filament\Forms\Form;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Grid;
-use Filament\Forms\Components\Section;
+use Filament\Forms\Components\Fieldset;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
@@ -23,156 +24,152 @@ use Filament\Resources\Pages\EditRecord;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Filament\Support\RawJs;
 use Illuminate\Support\Facades\Storage;
 
 class EditPayment extends EditRecord
 {
     protected static string $resource = PaymentResource::class;
 
+    public array $paidTuitionMonths = [];
+    public array $paidFoodMonths = [];
+    public ?Student $selectedStudent = null;
+    public $currentAcademicYear = null;
+
     /**
      * ✅ ກວດສອບສິດທິກ່ອນເຂົ້າໜ້າ
      */
-    public function mount(int | string $record): void
+    public function mount(int|string $record): void
     {
         parent::mount($record);
 
         // ກວດສອບສິດທິການແກ້ໄຂ
         if (!$this->record->canBeEdited()) {
             $this->redirectRoute('filament.admin.resources.payments.view', $this->record);
-            
+
             Notification::make()
                 ->title('ບໍ່ສາມາດແກ້ໄຂໄດ້')
                 ->body('ການຊຳລະເງິນນີ້ບໍ່ສາມາດແກ້ໄຂໄດ້ ເນື່ອງຈາກສະຖານະຫຼືສິດທິຂອງທ່ານ')
                 ->warning()
                 ->send();
         }
+
+        // ຕັ້ງຄ່າຂໍ້ມູນເບື້ອງຕົ້ນ
+        $this->selectedStudent = $this->record->student;
+        $this->currentAcademicYear = AcademicYear::where('is_current', true)->first();
+
+        // ໂຫຼດຂໍ້ມູນເດືອນທີ່ຈ່າຍແລ້ວ
+        $this->loadPaidMonths();
+
+        // ຕັ້ງຄ່າ receipt_number_view
+        $this->form->fill([
+            'receipt_number_view' => $this->record->receipt_number,
+            'discount_amount_view' => number_format($this->record->discount_amount ?? 0),
+            'total_amount_view' => number_format($this->record->total_amount ?? 0),
+        ]);
     }
 
     /**
-     * ✅ ຟອມສຳລັບແກ້ໄຂທີ່ມີ validation
+     * ✅ ໂຫຼດຂໍ້ມູນເດືອນທີ່ຈ່າຍແລ້ວ
+     */
+    private function loadPaidMonths(): void
+    {
+        if (!$this->selectedStudent || !$this->currentAcademicYear) {
+            return;
+        }
+
+        try {
+            // ຄ່າຮຽນທີ່ຈ່າຍແລ້ວ (ຍົກເວັ້ນການຊຳລະປັດຈຸບັນ)
+            $this->paidTuitionMonths = Payment::where('student_id', $this->selectedStudent->id)
+                ->where('academic_year_id', $this->currentAcademicYear->id)
+                ->where('payment_status', 'confirmed')
+                ->where('id', '!=', $this->record->id) // ຍົກເວັ້ນການຊຳລະປັດຈຸບັນ
+                ->whereNotNull('tuition_months')
+                ->pluck('tuition_months')
+                ->flatten()
+                ->unique()
+                ->values()
+                ->toArray();
+
+            // ຄ່າອາຫານທີ່ຈ່າຍແລ້ວ (ຍົກເວັ້ນການຊຳລະປັດຈຸບັນ)
+            $this->paidFoodMonths = Payment::where('student_id', $this->selectedStudent->id)
+                ->where('academic_year_id', $this->currentAcademicYear->id)
+                ->where('payment_status', 'confirmed')
+                ->where('id', '!=', $this->record->id) // ຍົກເວັ້ນການຊຳລະປັດຈຸບັນ
+                ->whereNotNull('food_months')
+                ->pluck('food_months')
+                ->flatten()
+                ->unique()
+                ->values()
+                ->toArray();
+
+        } catch (\Exception $e) {
+            Log::error('Error loading paid months: ' . $e->getMessage());
+            $this->paidTuitionMonths = [];
+            $this->paidFoodMonths = [];
+        }
+    }
+
+    /**
+     * ✅ ສ້າງລາຍການເດືອນທີ່ມີສັນຍາລັກຈ່າຍແລ້ວ
+     */
+    private function getAvailableTuitionMonths(): array
+    {
+        $months = Payment::getMonthOptions();
+
+        // ເພີ່ມສັນຍາລັກໃຫ້ເດືອນທີ່ຈ່າຍແລ້ວ
+        foreach ($this->paidTuitionMonths as $paidMonth) {
+            if (isset($months[$paidMonth])) {
+                $months[$paidMonth] .= ' ✅ (ຈ່າຍແລ້ວ)';
+            }
+        }
+
+        return $months;
+    }
+
+    private function getAvailableFoodMonths(): array
+    {
+        $months = Payment::getMonthOptions();
+
+        // ເພີ່ມສັນຍາລັກໃຫ້ເດືອນທີ່ຈ່າຍແລ້ວ
+        foreach ($this->paidFoodMonths as $paidMonth) {
+            if (isset($months[$paidMonth])) {
+                $months[$paidMonth] .= ' ✅ (ຈ່າຍແລ້ວ)';
+            }
+        }
+
+        return $months;
+    }
+
+    /**
+     * ✅ ສ້າງລາຍການທາງເລືອກສ່ວນຫຼຸດ
+     */
+    private function getDiscountOptions(): array
+    {
+        return \App\Models\Discount::where('is_active', true)
+            ->pluck('discount_name', 'discount_id')
+            ->toArray();
+    }
+
+    /**
+     * ✅ ຟອມແກ້ໄຂທີ່ມີໂຄງສ້າງຄືກັບ PaymentPage
      */
     public function form(Form $form): Form
     {
         return $form
             ->schema([
-                Section::make('ຂໍ້ມູນພື້ນຖານ')
+                // ເດືອນຄ່າຮຽນ ແລະ ຄ່າອາຫານ
+                Grid::make(2)
                     ->schema([
-                        Grid::make(2)
-                            ->schema([
-                                Select::make('student_id')
-                                    ->label('ນັກຮຽນ')
-                                    ->relationship('student', 'first_name_lao')
-                                    ->getOptionLabelFromRecordUsing(fn(Model $record) => "{$record->student_code} - {$record->getFullName()}")
-                                    ->searchable(['student_code', 'first_name_lao', 'last_name_lao'])
-                                    ->preload()
-                                    ->required()
-                                    ->disabled(fn(): bool => !auth()->user()->hasRole('admin')) // ແອດມິນເທົ່ານັ້ນຖຶງແກ້ໄຂນັກຮຽນໄດ້
-                                    ->columnSpan(1),
-
-                                Select::make('academic_year_id')
-                                    ->label('ສົກຮຽນ')
-                                    ->relationship('academicYear', 'year_name')
-                                    ->required()
-                                    ->disabled(fn(): bool => !auth()->user()->hasRole('admin'))
-                                    ->columnSpan(1),
-                            ]),
-
-                        Grid::make(3)
-                            ->schema([
-                                TextInput::make('receipt_number')
-                                    ->label('ເລກໃບບິນ')
-                                    ->required()
-                                    ->unique(Payment::class, 'receipt_number', ignoreRecord: true)
-                                    ->disabled(fn(): bool => $this->record->isConfirmed()), // ບໍ່ໃຫ້ແກ້ຖ້າຢືນຢັນແລ້ວ
-
-                                DateTimePicker::make('payment_date')
-                                    ->label('ວັນທີຊຳລະ')
-                                    ->required()
-                                    ->maxDate(now())
-                                    ->disabled(fn(): bool => $this->record->isConfirmed()),
-
-                                Select::make('payment_status')
-                                    ->label('ສະຖານະ')
-                                    ->options(Payment::getStatusOptions())
-                                    ->required()
-                                    ->disabled(fn(): bool => !auth()->user()->hasRole('admin')),
-                            ]),
-                    ]),
-
-                Section::make('ຈຳນວນເງິນ')
-                    ->schema([
-                        Grid::make(2)
-                            ->schema([
-                                TextInput::make('cash')
-                                    ->label('ເງິນສົດ (ກີບ)')
-                                    ->numeric()
-                                    ->minValue(0)
-                                    ->step(1000)
-                                    ->live(onBlur: true)
-                                    ->afterStateUpdated(fn($state, Set $set, Get $get) => $this->calculateTotal($set, $get)),
-
-                                TextInput::make('transfer')
-                                    ->label('ເງິນໂອນ (ກີບ)')
-                                    ->numeric()
-                                    ->minValue(0)
-                                    ->step(1000)
-                                    ->live(onBlur: true)
-                                    ->afterStateUpdated(fn($state, Set $set, Get $get) => $this->calculateTotal($set, $get)),
-                            ]),
-
-                        Grid::make(3)
-                            ->schema([
-                                TextInput::make('food_money')
-                                    ->label('ຄ່າອາຫານ (ກີບ)')
-                                    ->numeric()
-                                    ->minValue(0)
-                                    ->step(1000)
-                                    ->live(onBlur: true)
-                                    ->afterStateUpdated(fn($state, Set $set, Get $get) => $this->calculateTotal($set, $get)),
-
-                                TextInput::make('late_fee')
-                                    ->label('ຄ່າປັບຊ້າ (ກີບ)')
-                                    ->numeric()
-                                    ->minValue(0)
-                                    ->step(1000)
-                                    ->live(onBlur: true)
-                                    ->afterStateUpdated(fn($state, Set $set, Get $get) => $this->calculateTotal($set, $get)),
-
-                                Select::make('discount_id')
-                                    ->label('ສ່ວນຫຼຸດ')
-                                    ->relationship('discount', 'discount_name')
-                                    ->searchable()
-                                    ->preload()
-                                    ->live()
-                                    ->afterStateUpdated(fn($state, Set $set, Get $get) => $this->calculateTotal($set, $get)),
-                            ]),
-
-                        Grid::make(2)
-                            ->schema([
-                                TextInput::make('discount_amount')
-                                    ->label('ຈຳນວນສ່ວນຫຼຸດ (ກີບ)')
-                                    ->numeric()
-                                    ->minValue(0)
-                                    ->step(1000)
-                                    ->readonly(),
-
-                                TextInput::make('total_amount')
-                                    ->label('ລວມທັງໝົດ (ກີບ)')
-                                    ->numeric()
-                                    ->required()
-                                    ->minValue(1)
-                                    ->step(1000),
-                            ]),
-                    ]),
-
-                Section::make('ເດືອນທີ່ຈ່າຍ')
-                    ->schema([
-                        Grid::make(2)
+                        Fieldset::make("tuition_months_section")
+                            ->label('ເດືອນຄ່າຮຽນ')
                             ->schema([
                                 CheckboxList::make('tuition_months')
-                                    ->label('ເດືອນຄ່າຮຽນ')
-                                    ->options(Payment::getMonthOptions())
+                                    ->hiddenLabel()
+                                    ->options(fn() => $this->getAvailableTuitionMonths())
+                                    ->disableOptionWhen(fn(string $value): bool => in_array($value, $this->paidTuitionMonths))
                                     ->columns(3)
+                                    ->columnSpanFull()
                                     ->required()
                                     ->live()
                                     ->afterStateUpdated(fn($state, Set $set, Get $get) => $this->calculateTotal($set, $get))
@@ -184,12 +181,11 @@ class EditPayment extends EditRecord
                                                     return;
                                                 }
 
-                                                // ✅ ກວດສອບເດືອນຊ້ຳ (ຍົກເວັ້ນ record ປັດຈຸບັນ)
-                                                if ($this->record->student_id && !empty($value)) {
+                                                // ກວດສອບເດືອນຊ້ຳ
+                                                if ($this->selectedStudent && !empty($value)) {
                                                     $paidMonths = Payment::getPaidTuitionMonths(
-                                                        $this->record->student_id,
-                                                        $this->record->academic_year_id,
-                                                        $this->record->payment_id // ✅ ຍົກເວັ້ນ record ປັດຈຸບັນ
+                                                        $this->selectedStudent->student_id,
+                                                        $this->currentAcademicYear?->academic_year_id
                                                     );
                                                     $duplicates = array_intersect($value, $paidMonths);
                                                     if (!empty($duplicates)) {
@@ -199,23 +195,27 @@ class EditPayment extends EditRecord
                                             };
                                         },
                                     ])
-                                    ->columnSpan(1),
+                            ])->columnSpan(1),
 
+                        Fieldset::make("food_months_section")
+                            ->label('ເດືອນຄ່າອາຫານ (ເປັນທາງເລືອກ)')
+                            ->schema([
                                 CheckboxList::make('food_months')
-                                    ->label('ເດືອນຄ່າອາຫານ')
-                                    ->options(Payment::getMonthOptions())
+                                    ->hiddenLabel()
+                                    ->options(fn() => $this->getAvailableFoodMonths())
+                                    ->disableOptionWhen(fn(string $value): bool => in_array($value, $this->paidFoodMonths))
                                     ->columns(3)
+                                    ->columnSpanFull()
                                     ->live()
                                     ->afterStateUpdated(fn($state, Set $set, Get $get) => $this->calculateTotal($set, $get))
                                     ->rules([
                                         function () {
                                             return function (string $attribute, $value, \Closure $fail) {
-                                                // ✅ ກວດສອບເດືອນຊ້ຳສຳລັບຄ່າອາຫານ
-                                                if ($this->record->student_id && !empty($value)) {
+                                                // ກວດສອບເດືອນຊ້ຳສຳລັບຄ່າອາຫານ
+                                                if ($this->selectedStudent && !empty($value)) {
                                                     $paidMonths = Payment::getPaidFoodMonths(
-                                                        $this->record->student_id,
-                                                        $this->record->academic_year_id,
-                                                        $this->record->payment_id // ✅ ຍົກເວັ້ນ record ປັດຈຸບັນ
+                                                        $this->selectedStudent->student_id,
+                                                        $this->currentAcademicYear?->academic_year_id
                                                     );
                                                     $duplicates = array_intersect($value, $paidMonths);
                                                     if (!empty($duplicates)) {
@@ -225,119 +225,196 @@ class EditPayment extends EditRecord
                                             };
                                         },
                                     ])
-                                    ->columnSpan(1),
-                            ]),
-                    ])
-                    ->disabled(fn(): bool => $this->record->isConfirmed() && !auth()->user()->hasRole('admin')),
+                            ])->columnSpan(1),
+                    ]),
 
-                Section::make('ຂໍ້ມູນເພີ່ມເຕີມ')
+                // ການຊຳລະເງິນ
+                Grid::make(2)
                     ->schema([
-                        Select::make('received_by')
-                            ->label('ຜູ້ຮັບເງິນ')
-                            ->relationship('receiver', 'username')
-                            ->required()
-                            ->searchable()
-                            ->preload()
-                            ->disabled(fn(): bool => !auth()->user()->hasRole('admin')),
+                        Fieldset::make("cash_payment_section")
+                            ->label('ການຊຳລະເງິນສົດ')
+                            ->schema([
+                                TextInput::make('cash')
+                                    ->label('ຈຳນວນເງິນສົດ (ກີບ)')
+                                    ->prefixIcon('heroicon-o-banknotes')
+                                    ->numeric()
+                                    ->minValue(0)
+                                    ->default(0)
+                                    ->mask(\Filament\Support\RawJs::make('$money($input)'))
+                                    ->stripCharacters(',')
+                                    ->placeholder('ປ້ອນຈຳນວນເງິນສົດ')
+                                    ->live(onBlur: true)
+                                    ->afterStateUpdated(fn($state, Set $set, Get $get) => $this->calculateTotal($set, $get)),
 
-                        Textarea::make('note')
-                            ->label('ໝາຍເຫດ')
-                            ->rows(3)
-                            ->maxLength(500),
+                                TextInput::make('late_fee')
+                                    ->label('ຄ່າປັບຈ່າຍຊ້າ (ກີບ)')
+                                    ->prefixIcon('heroicon-o-exclamation-triangle')
+                                    ->numeric()
+                                    ->minValue(0)
+                                    ->default(0)
+                                    ->mask(\Filament\Support\RawJs::make('$money($input)'))
+                                    ->stripCharacters(',')
+                                    ->live(onBlur: true)
+                                    ->afterStateUpdated(fn($state, Set $set, Get $get) => $this->calculateTotal($set, $get)),
 
-                        FileUpload::make('payment_images')
-                            ->label('ຮູບໃບບິນ/ໃບໂອນ')
-                            ->disk('public')
-                            ->directory('payment_receipts')
-                            ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/jpg'])
-                            ->maxSize(5120)
-                            ->imagePreviewHeight('150')
-                            ->multiple()
-                            ->maxFiles(3)
-                            ->columnSpanFull()
-                            ->deleteUploadedFileUsing(function ($file) {
-                                if (Storage::disk('public')->exists($file)) {
-                                    Storage::disk('public')->delete($file);
-                                }
-                            }),
-                    ])
-                    ->collapsible(),
-            ]);
+                                Select::make('discount_id')
+                                    ->label("ສ່ວນຫຼຸດ")
+                                    ->prefixIcon('heroicon-o-gift')
+                                    ->placeholder("ເລືອກສ່ວນຫຼຸດ")
+                                    ->options(fn() => $this->getDiscountOptions())
+                                    ->searchable()
+                                    ->live()
+                                    ->afterStateUpdated(fn($state, Set $set, Get $get) => $this->calculateTotal($set, $get)),
+                            ])
+                            ->columns(1)
+                            ->columnSpan(1),
+
+                        Fieldset::make("transfer_payment_section")
+                            ->label('ການຊຳລະເງິນໂອນ')
+                            ->schema([
+                                TextInput::make('transfer')
+                                    ->label('ຈຳນວນເງິນໂອນ (ກີບ)')
+                                    ->prefixIcon('heroicon-o-credit-card')
+                                    ->numeric()
+                                    ->minValue(0)
+                                    ->default(0)
+                                    ->mask(\Filament\Support\RawJs::make('$money($input)'))
+                                    ->stripCharacters(',')
+                                    ->placeholder('ປ້ອນຈຳນວນເງິນໂອນ')
+                                    ->live(onBlur: true)
+                                    ->afterStateUpdated(fn($state, Set $set, Get $get) => $this->calculateTotal($set, $get)),
+
+                                TextInput::make("food_money")
+                                    ->label('ຄ່າອາຫານ (ກີບ)')
+                                    ->prefixIcon('heroicon-o-cake')
+                                    ->numeric()
+                                    ->minValue(0)
+                                    ->default(0)
+                                    ->mask(\Filament\Support\RawJs::make('$money($input)'))
+                                    ->stripCharacters(',')
+                                    ->live(onBlur: true)
+                                    ->afterStateUpdated(fn($state, Set $set, Get $get) => $this->calculateTotal($set, $get)),
+
+                                DateTimePicker::make('payment_date')
+                                    ->label('ວັນທີຊຳລະ')
+                                    ->prefixIcon('heroicon-o-calendar-days')
+                                    ->required()
+                                    ->default(now())
+                                    ->maxDate(now()->addDay()),
+
+                                FileUpload::make('image_path')
+                                    ->label("ຮູບໃບໂອນ/ໃບບິນ")
+                                    ->disk('public') // ໃຊ້ public disk
+                                    ->directory('payment_receipts') // ໂຟນເດີໃສ່ໄຟລ์
+                                    ->visibility('public') // ຕັ້ງໃຫ້ເປັນ public
+                                    ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/jpg', 'image/webp'])
+                                    ->maxSize(5120) // 5MB
+                                    ->imagePreviewHeight('150')
+                                    ->multiple(true) // ອະນຸຍາດຫຼາຍຮູບ
+                                    ->maxFiles(3)
+                                    ->reorderable(true) // ສາມາດຈັດລຳດັບໄດ້
+                                    ->previewable(true) // ສາມາດເບິ່ງຕົວຢ່າງໄດ້
+                                    ->downloadable(true) // ສາມາດດາວໂຫລດໄດ້
+                                    ->helperText('ອັບໂຫຼດໄດ້ສູງສຸດ 3 ຮູບ, ແຕ່ລະຮູບບໍ່ເກີນ 5MB (PNG, JPG, JPEG, WEBP)')
+                                    ->columnSpanFull()
+                                    ->deleteUploadedFileUsing(function ($file) {
+                                        // ລົບໄຟລ์ອອກຈາກ storage
+                                        if (Storage::disk('public')->exists($file)) {
+                                            Storage::disk('public')->delete($file);
+                                            return true;
+                                        }
+                                        return false;
+                                    })
+                                    ->getUploadedFileNameForStorageUsing(function ($file) {
+                                        // ສ້າງຊື່ໄຟລ໌ໃໝ່ທີ່ບໍ່ຊ້ອນກັນ
+                                        $extension = $file->getClientOriginalExtension();
+                                        $fileName = time() . '_' . uniqid() . '.' . $extension;
+                                        return $fileName;
+                                    })
+                            ])
+                            ->columns(1)
+                            ->columnSpan(1),
+                    ]),
+
+                // ສະຫຼຸບການຊຳລະ
+                Fieldset::make('payment_summary')
+                    ->label('ສະຫຼຸບການຊຳລະ')
+                    ->schema([
+                        Grid::make(3)
+                            ->schema([
+                                TextInput::make('receipt_number_view')
+                                    ->label('ເລກໃບບິນ')
+                                    ->prefixIcon('heroicon-o-hashtag')
+                                    ->disabled()
+                                    ->dehydrated(false),
+
+                                TextInput::make('discount_amount_view')
+                                    ->label('ຈຳນວນສ່ວນຫຼຸດ')
+                                    ->prefixIcon('heroicon-o-tag')
+                                    ->disabled()
+                                    ->dehydrated(false)
+                                    ->suffix('ກີບ'),
+
+                                TextInput::make('total_amount_view')
+                                    ->label("ລວມທັງໝົດ")
+                                    ->prefixIcon('heroicon-o-currency-dollar')
+                                    ->disabled()
+                                    ->dehydrated(false)
+                                    ->suffix('ກີບ')
+                                    ->extraAttributes(['class' => 'font-bold text-lg']),
+                            ]),
+
+                        // Hidden fields
+                        Hidden::make('receipt_number'),
+                        Hidden::make('discount_amount'),
+                        Hidden::make('total_amount'),
+                    ]),
+
+                // ໝາຍເຫດ
+                Textarea::make('note')
+                    ->label("ໝາຍເຫດ")
+                    ->rows(3)
+                    ->maxLength(500)
+                    ->placeholder('ໝາຍເຫດເພີ່ມເຕີມ (ຖ້າມີ)')
+                    ->columnSpanFull(),
+
+                // Hidden fields for data integrity
+                Hidden::make('student_id'),
+                Hidden::make('academic_year_id'),
+            ])
+            ->statePath('data');
     }
 
     /**
-     * ✅ ຄິດໄລ່ລວມເງິນແບບ real-time
+     * ✅ ຄິດໄລ່ຈຳນວນເງິນລວມ (ເໝືອນກັບ PaymentPage)
      */
     private function calculateTotal(Set $set, Get $get): void
     {
-        try {
-            $cash = $this->parseAmount($get('cash') ?? 0);
-            $transfer = $this->parseAmount($get('transfer') ?? 0);
-            $foodMoney = $this->parseAmount($get('food_money') ?? 0);
-            $lateFee = $this->parseAmount($get('late_fee') ?? 0);
-            $discountId = $get('discount_id');
+        $tuitionMonths = $get('tuition_months') ?? [];
+        $foodMonths = $get('food_months') ?? [];
+        $cash = (float) ($get('cash') ?? 0);
+        $transfer = (float) ($get('transfer') ?? 0);
+        $foodMoney = (float) ($get('food_money') ?? 0);
+        $lateFee = (float) ($get('late_fee') ?? 0);
+        $discountAmount = (float) ($get('discount_amount') ?? 0);
 
-            $subtotal = $cash + $transfer + $foodMoney + $lateFee;
-            $discountAmount = $this->calculateDiscountAmount($discountId, $subtotal);
-            $total = max(0, $subtotal - $discountAmount);
-
-            $set('discount_amount', $discountAmount);
-            $set('total_amount', $total);
-
-        } catch (\Exception $e) {
-            Log::error('Error in calculateTotal during edit: ' . $e->getMessage());
-        }
-    }
-
-    /**
-     * ✅ ຄິດໄລ່ສ່ວນຫຼຸດ
-     */
-    private function calculateDiscountAmount($discountId, float $amount): float
-    {
-        if (!$discountId || $amount <= 0) {
-            return 0;
+        // ຄິດໄລ່ຄ່າຮຽນ
+        $tuitionAmount = 0;
+        if ($this->selectedStudent && $this->currentAcademicYear) {
+            $tuitionAmount = count($tuitionMonths) * $this->currentAcademicYear->tuition_fee;
         }
 
-        try {
-            $discount = \App\Models\Discount::find($discountId);
-            if (!$discount || !$discount->is_active) {
-                return 0;
-            }
-
-            if ($amount < ($discount->min_amount ?? 0)) {
-                return 0;
-            }
-
-            if ($discount->discount_type === 'percentage') {
-                $discountAmount = ($amount * $discount->discount_value) / 100;
-                
-                if ($discount->max_amount && $discountAmount > $discount->max_amount) {
-                    $discountAmount = $discount->max_amount;
-                }
-                
-                return $discountAmount;
-            } elseif ($discount->discount_type === 'fixed') {
-                return min($discount->discount_value, $amount);
-            }
-
-            return 0;
-        } catch (\Exception $e) {
-            Log::error('Error calculating discount during edit: ' . $e->getMessage());
-            return 0;
-        }
-    }
-
-    /**
-     * ✅ Helper method ສຳລັບການແປງຄ່າເງິນ
-     */
-    private function parseAmount($value): float
-    {
-        if (is_null($value) || $value === '') {
-            return 0;
+        // ຄິດໄລ່ຄ່າອາຫານ
+        $foodAmount = 0;
+        if ($this->selectedStudent && $this->currentAcademicYear && count($foodMonths) > 0) {
+            $foodAmount = $foodMoney; // ໃຊ້ຈຳນວນທີ່ປ້ອນເຂົ້າ
         }
 
-        $cleaned = str_replace([',', ' '], '', (string) $value);
-        return is_numeric($cleaned) ? (float) $cleaned : 0;
+        // ຈຳນວນລວມ
+        $total = $tuitionAmount + $foodAmount + $lateFee - $discountAmount;
+
+        $set('total_amount', $total);
+        $set('total_amount_view', number_format($total));
     }
 
     /**
@@ -360,7 +437,7 @@ class EditPayment extends EditRecord
                 ->visible(fn(): bool => $this->record->isPending())
                 ->action(function (): void {
                     $this->record->update(['payment_status' => 'confirmed']);
-                    
+
                     Notification::make()
                         ->title('ຢືນຢັນສຳເລັດ')
                         ->body('ການຊຳລະເງິນໄດ້ຮັບການຢືນຢັນແລ້ວ')
@@ -381,7 +458,7 @@ class EditPayment extends EditRecord
                 ->visible(fn(): bool => $this->record->isPending())
                 ->action(function (): void {
                     $this->record->update(['payment_status' => 'cancelled']);
-                    
+
                     Notification::make()
                         ->title('ຍົກເລີກສຳເລັດ')
                         ->body('ການຊຳລະເງິນໄດ້ຖືກຍົກເລີກແລ້ວ')
@@ -398,31 +475,18 @@ class EditPayment extends EditRecord
     }
 
     /**
-     * ✅ ກ່ອນບັນທຶກ - ກວດສອບຂໍ້ມູນ
+     * ✅ ກ່ອນບັນທຶກ - ກວດສອບແລະປັບແຕ່ງຂໍ້ມູນ
      */
     protected function mutateFormDataBeforeSave(array $data): array
     {
-        // ✅ ກວດສອບສິດທິອີກຄັ້ງ
+        // ກວດສອບສິດທິອີກຄັ້ງ
         if (!$this->record->canBeEdited()) {
             throw new \Exception('ບໍ່ສາມາດແກ້ໄຂການຊຳລະເງິນນີ້ໄດ້');
         }
 
-        // ✅ ກວດສອບຈຳນວນເງິນ
-        $cash = $this->parseAmount($data['cash'] ?? 0);
-        $transfer = $this->parseAmount($data['transfer'] ?? 0);
-        $foodMoney = $this->parseAmount($data['food_money'] ?? 0);
-
-        if ($cash <= 0 && $transfer <= 0 && $foodMoney <= 0) {
-            throw new \Exception('ກະລຸນາປ້ອນຈຳນວນເງິນທີ່ຈະຊຳລະ');
-        }
-
-        // ✅ ກວດສອບເດືອນ
-        $tuitionMonths = $data['tuition_months'] ?? [];
-        $foodMonths = $data['food_months'] ?? [];
-
-        if (empty($tuitionMonths) && empty($foodMonths)) {
-            throw new \Exception('ກະລຸນາເລືອກເດືອນທີ່ຈະຊຳລະ');
-        }
+        // ປັບແຕ່ງຂໍ້ມູນ
+        $data['student_id'] = $this->selectedStudent->id;
+        $data['academic_year_id'] = $this->currentAcademicYear->id;
 
         return $data;
     }
@@ -432,50 +496,10 @@ class EditPayment extends EditRecord
      */
     protected function afterSave(): void
     {
-        Log::info('Payment updated', [
-            'payment_id' => $this->record->payment_id,
-            'receipt_number' => $this->record->receipt_number,
-            'updated_by' => auth()->id(),
-            'old_status' => $this->record->getOriginal('payment_status'),
-            'new_status' => $this->record->payment_status,
-        ]);
-
         Notification::make()
-            ->title('ອັບເດດສຳເລັດ')
-            ->body("ອັບເດດການຊຳລະເງິນເລກທີ {$this->record->receipt_number} ສຳເລັດແລ້ວ")
+            ->title('ບັນທຶກສຳເລັດ')
+            ->body('ການແກ້ໄຂການຊຳລະເງິນສຳເລັດແລ້ວ')
             ->success()
             ->send();
-    }
-
-    /**
-     * ✅ ຫາມີ error ໃນການບັນທຶກ
-     */
-    protected function onValidationError(\Illuminate\Validation\ValidationException $exception): void
-    {
-        Notification::make()
-            ->title('ຂໍ້ມູນບໍ່ຖືກຕ້ອງ')
-            ->body('ກະລຸນາກວດສອບຂໍ້ມູນທີ່ປ້ອນ')
-            ->danger()
-            ->send();
-    }
-
-    /**
-     * ✅ ກຳນົດ Title ຂອງໜ້າ
-     */
-    public function getTitle(): string
-    {
-        return "ແກ້ໄຂການຊຳລະ #{$this->record->receipt_number}";
-    }
-
-    /**
-     * ✅ ກຳນົດ Breadcrumbs
-     */
-    public function getBreadcrumbs(): array
-    {
-        return [
-            $this->getResource()::getUrl() => $this->getResource()::getNavigationLabel(),
-            $this->getResource()::getUrl('view', ['record' => $this->record]) => "#{$this->record->receipt_number}",
-            '#' => 'ແກ້ໄຂ',
-        ];
     }
 }
