@@ -36,8 +36,10 @@ class EditPayment extends EditRecord
     public ?Student $selectedStudent = null;
     public $currentAcademicYear = null;
 
+    public ?array $data = [];
+
     /**
-     * ✅ ກວດສອບສິດທິກ່ອນເຂົ້າໜ້າ
+     * ✅ ແກ້ໄຂ mount() method ໃຫ້ຄົບຖ້ວນ
      */
     public function mount(int|string $record): void
     {
@@ -52,93 +54,95 @@ class EditPayment extends EditRecord
                 ->body('ການຊຳລະເງິນນີ້ບໍ່ສາມາດແກ້ໄຂໄດ້ ເນື່ອງຈາກສະຖານະຫຼືສິດທິຂອງທ່ານ')
                 ->warning()
                 ->send();
+            return;
         }
 
         // ຕັ້ງຄ່າຂໍ້ມູນເບື້ອງຕົ້ນ
         $this->selectedStudent = $this->record->student;
-        $this->currentAcademicYear = AcademicYear::where('is_current', true)->first();
+        $this->currentAcademicYear = $this->record->academicYear ?? AcademicYear::where('is_current', true)->first();
 
         // ໂຫຼດຂໍ້ມູນເດືອນທີ່ຈ່າຍແລ້ວ
         $this->loadPaidMonths();
 
-        // ຕັ້ງຄ່າ receipt_number_view
-        $this->form->fill([
-            'receipt_number_view' => $this->record->receipt_number,
-            'discount_amount_view' => number_format($this->record->discount_amount ?? 0),
-            'total_amount_view' => number_format($this->record->total_amount ?? 0),
-        ]);
-    }
+        // ✅ ຕື່ມຂໍ້ມູນໃສ່ form ໃຫ້ຄົບຖ້ວນ
+        try {
+            $this->form->fill([
+                'student_id' => $this->record->student_id,
+                'academic_year_id' => $this->record->academic_year_id,
+                'receipt_number' => $this->record->receipt_number,
+                'receipt_number_view' => $this->record->receipt_number,
+                'payment_date' => $this->record->payment_date,
+                'cash' => $this->record->cash,
+                'transfer' => $this->record->transfer,
+                'food_money' => $this->record->food_money,
+                'tuition_months' => $this->record->getTuitionMonthsSafe(),
+                'food_months' => $this->record->getFoodMonthsSafe(),
+                'discount_id' => $this->record->discount_id,
+                'discount_amount' => $this->record->discount_amount,
+                'discount_amount_view' => number_format($this->record->discount_amount ?? 0),
+                'late_fee' => $this->record->late_fee,
+                'total_amount' => $this->record->total_amount,
+                'total_amount_view' => number_format($this->record->total_amount ?? 0),
+                'note' => $this->record->note,
+                'payment_status' => $this->record->payment_status,
+                // ສຳລັບຮູບພາບ
+                'image_path' => $this->record->images->pluck('image_path')->toArray(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error filling form in EditPayment mount: ' . $e->getMessage());
 
+            Notification::make()
+                ->title('ເກີດຂໍ້ຜິດພາດ')
+                ->body('ບໍ່ສາມາດໂຫຼດຂໍ້ມູນການຊຳລະເງິນໄດ້')
+                ->danger()
+                ->send();
+        }
+    }
     /**
      * ✅ ໂຫຼດຂໍ້ມູນເດືອນທີ່ຈ່າຍແລ້ວ
      */
+    /**
+     * ✅ ແກ້ໄຂ method loadPaidMonths() 
+     * ປັບປຸງການຈັດການ array/string ໃຫ້ຖືກຕ້ອງ
+     */
     private function loadPaidMonths(): void
     {
-        if (!$this->selectedStudent || !$this->currentAcademicYear) {
-            return;
-        }
-
         try {
-            // ຄ່າຮຽນທີ່ຈ່າຍແລ້ວ (ຍົກເວັ້ນການຊຳລະປັດຈຸບັນ)
-            $this->paidTuitionMonths = Payment::where('student_id', $this->selectedStudent->id)
-                ->where('academic_year_id', $this->currentAcademicYear->id)
-                ->where('payment_status', 'confirmed')
-                ->where('id', '!=', $this->record->id) // ຍົກເວັ້ນການຊຳລະປັດຈຸບັນ
-                ->whereNotNull('tuition_months')
-                ->pluck('tuition_months')
-                ->flatten()
-                ->unique()
-                ->values()
-                ->toArray();
-
-            // ຄ່າອາຫານທີ່ຈ່າຍແລ້ວ (ຍົກເວັ້ນການຊຳລະປັດຈຸບັນ)
-            $this->paidFoodMonths = Payment::where('student_id', $this->selectedStudent->id)
-                ->where('academic_year_id', $this->currentAcademicYear->id)
-                ->where('payment_status', 'confirmed')
-                ->where('id', '!=', $this->record->id) // ຍົກເວັ້ນການຊຳລະປັດຈຸບັນ
-                ->whereNotNull('food_months')
-                ->pluck('food_months')
-                ->flatten()
-                ->unique()
-                ->values()
-                ->toArray();
+            // ✅ ໃຊ້ helper methods ທີ່ປອດໄພຈາກ Model
+            $this->paidTuitionMonths = $this->record->getTuitionMonthsSafe();
+            $this->paidFoodMonths = $this->record->getFoodMonthsSafe();
 
         } catch (\Exception $e) {
-            Log::error('Error loading paid months: ' . $e->getMessage());
+            Log::error('Error loading paid months in EditPayment: ' . $e->getMessage());
             $this->paidTuitionMonths = [];
             $this->paidFoodMonths = [];
+
+            Notification::make()
+                ->title('ເກີດຂໍ້ຜິດພາດ')
+                ->body('ບໍ່ສາມາດໂຫຼດຂໍ້ມູນເດືອນທີ່ຈ່າຍແລ້ວໄດ້')
+                ->warning()
+                ->send();
         }
     }
 
     /**
-     * ✅ ສ້າງລາຍການເດືອນທີ່ມີສັນຍາລັກຈ່າຍແລ້ວ
+     * ✅ ແກ້ໄຂ method ສຳລັບດຶງເດືອນທີ່ມີຢູ່
      */
     private function getAvailableTuitionMonths(): array
     {
-        $months = Payment::getMonthOptions();
+        return Payment::getMonthOptions();
+    }
 
-        // ເພີ່ມສັນຍາລັກໃຫ້ເດືອນທີ່ຈ່າຍແລ້ວ
-        foreach ($this->paidTuitionMonths as $paidMonth) {
-            if (isset($months[$paidMonth])) {
-                $months[$paidMonth] .= ' ✅ (ຈ່າຍແລ້ວ)';
-            }
-        }
-
-        return $months;
+    public function isMonthPaid(string $month, string $type = 'tuition'): bool
+    {
+        $paidMonths = $type === 'tuition' ? $this->paidTuitionMonths : $this->paidFoodMonths;
+        return in_array($month, $paidMonths);
     }
 
     private function getAvailableFoodMonths(): array
     {
-        $months = Payment::getMonthOptions();
+        return Payment::getMonthOptions();
 
-        // ເພີ່ມສັນຍາລັກໃຫ້ເດືອນທີ່ຈ່າຍແລ້ວ
-        foreach ($this->paidFoodMonths as $paidMonth) {
-            if (isset($months[$paidMonth])) {
-                $months[$paidMonth] .= ' ✅ (ຈ່າຍແລ້ວ)';
-            }
-        }
-
-        return $months;
     }
 
     /**
@@ -167,34 +171,11 @@ class EditPayment extends EditRecord
                                 CheckboxList::make('tuition_months')
                                     ->hiddenLabel()
                                     ->options(fn() => $this->getAvailableTuitionMonths())
-                                    ->disableOptionWhen(fn(string $value): bool => in_array($value, $this->paidTuitionMonths))
+                                    ->disableOptionWhen(fn(string $value): bool => $this->isMonthPaid($value, 'tuition'))
                                     ->columns(3)
                                     ->columnSpanFull()
                                     ->required()
                                     ->live()
-                                    ->afterStateUpdated(fn($state, Set $set, Get $get) => $this->calculateTotal($set, $get))
-                                    ->rules([
-                                        function () {
-                                            return function (string $attribute, $value, \Closure $fail) {
-                                                if (empty($value)) {
-                                                    $fail('ກະລຸນາເລືອກຢ່າງໜ້ອຍ 1 ເດືອນສຳລັບຄ່າຮຽນ');
-                                                    return;
-                                                }
-
-                                                // ກວດສອບເດືອນຊ້ຳ
-                                                if ($this->selectedStudent && !empty($value)) {
-                                                    $paidMonths = Payment::getPaidTuitionMonths(
-                                                        $this->selectedStudent->student_id,
-                                                        $this->currentAcademicYear?->academic_year_id
-                                                    );
-                                                    $duplicates = array_intersect($value, $paidMonths);
-                                                    if (!empty($duplicates)) {
-                                                        $fail('ເດືອນ ' . implode(', ', $duplicates) . ' ໄດ້ຈ່າຍຄ່າຮຽນແລ້ວ');
-                                                    }
-                                                }
-                                            };
-                                        },
-                                    ])
                             ])->columnSpan(1),
 
                         Fieldset::make("food_months_section")
@@ -203,28 +184,11 @@ class EditPayment extends EditRecord
                                 CheckboxList::make('food_months')
                                     ->hiddenLabel()
                                     ->options(fn() => $this->getAvailableFoodMonths())
-                                    ->disableOptionWhen(fn(string $value): bool => in_array($value, $this->paidFoodMonths))
+                                    ->disableOptionWhen(fn(string $value): bool => $this->isMonthPaid($value, 'food'))
                                     ->columns(3)
                                     ->columnSpanFull()
                                     ->live()
                                     ->afterStateUpdated(fn($state, Set $set, Get $get) => $this->calculateTotal($set, $get))
-                                    ->rules([
-                                        function () {
-                                            return function (string $attribute, $value, \Closure $fail) {
-                                                // ກວດສອບເດືອນຊ້ຳສຳລັບຄ່າອາຫານ
-                                                if ($this->selectedStudent && !empty($value)) {
-                                                    $paidMonths = Payment::getPaidFoodMonths(
-                                                        $this->selectedStudent->student_id,
-                                                        $this->currentAcademicYear?->academic_year_id
-                                                    );
-                                                    $duplicates = array_intersect($value, $paidMonths);
-                                                    if (!empty($duplicates)) {
-                                                        $fail('ເດືອນ ' . implode(', ', $duplicates) . ' ໄດ້ຈ່າຍຄ່າອາຫານແລ້ວ');
-                                                    }
-                                                }
-                                            };
-                                        },
-                                    ])
                             ])->columnSpan(1),
                     ]),
 
@@ -240,7 +204,7 @@ class EditPayment extends EditRecord
                                     ->numeric()
                                     ->minValue(0)
                                     ->default(0)
-                                    ->mask(\Filament\Support\RawJs::make('$money($input)'))
+                                    ->mask(RawJs::make('$money($input)'))
                                     ->stripCharacters(',')
                                     ->placeholder('ປ້ອນຈຳນວນເງິນສົດ')
                                     ->live(onBlur: true)
@@ -252,7 +216,7 @@ class EditPayment extends EditRecord
                                     ->numeric()
                                     ->minValue(0)
                                     ->default(0)
-                                    ->mask(\Filament\Support\RawJs::make('$money($input)'))
+                                    ->mask(RawJs::make('$money($input)'))
                                     ->stripCharacters(',')
                                     ->live(onBlur: true)
                                     ->afterStateUpdated(fn($state, Set $set, Get $get) => $this->calculateTotal($set, $get)),
@@ -278,7 +242,7 @@ class EditPayment extends EditRecord
                                     ->numeric()
                                     ->minValue(0)
                                     ->default(0)
-                                    ->mask(\Filament\Support\RawJs::make('$money($input)'))
+                                    ->mask(RawJs::make('$money($input)'))
                                     ->stripCharacters(',')
                                     ->placeholder('ປ້ອນຈຳນວນເງິນໂອນ')
                                     ->live(onBlur: true)
@@ -290,7 +254,7 @@ class EditPayment extends EditRecord
                                     ->numeric()
                                     ->minValue(0)
                                     ->default(0)
-                                    ->mask(\Filament\Support\RawJs::make('$money($input)'))
+                                    ->mask(RawJs::make('$money($input)'))
                                     ->stripCharacters(',')
                                     ->live(onBlur: true)
                                     ->afterStateUpdated(fn($state, Set $set, Get $get) => $this->calculateTotal($set, $get)),
@@ -386,35 +350,65 @@ class EditPayment extends EditRecord
     }
 
     /**
+     * ✅ Helper method ສຳລັບການແປງຄ່າເງິນ
+     */
+    private function parseAmount($value): float
+    {
+        if (is_null($value) || $value === '') {
+            return 0;
+        }
+
+        // ລຶບ comma ແລະ spaces
+        $cleaned = str_replace([',', ' '], '', (string) $value);
+
+        return is_numeric($cleaned) ? (float) $cleaned : 0;
+    }
+
+    /**
+     * ✅ Helper method ສຳລັບການຈັດຮູບແບບເງິນ
+     */
+    private function formatMoney(float $amount): string
+    {
+        return number_format($amount, 0, '.', ',');
+    }
+
+    /**
      * ✅ ຄິດໄລ່ຈຳນວນເງິນລວມ (ເໝືອນກັບ PaymentPage)
      */
     private function calculateTotal(Set $set, Get $get): void
     {
-        $tuitionMonths = $get('tuition_months') ?? [];
-        $foodMonths = $get('food_months') ?? [];
-        $cash = (float) ($get('cash') ?? 0);
-        $transfer = (float) ($get('transfer') ?? 0);
-        $foodMoney = (float) ($get('food_money') ?? 0);
-        $lateFee = (float) ($get('late_fee') ?? 0);
-        $discountAmount = (float) ($get('discount_amount') ?? 0);
+        try {
+            // ດຶງຄ່າຈາກ form
+            $cash = $this->parseAmount($get('cash'));
+            $transfer = $this->parseAmount($get('transfer'));
+            $foodMoney = $this->parseAmount($get('food_money'));
+            $lateFee = $this->parseAmount($get('late_fee'));
+            $discountId = $get('discount_id');
 
-        // ຄິດໄລ່ຄ່າຮຽນ
-        $tuitionAmount = 0;
-        if ($this->selectedStudent && $this->currentAcademicYear) {
-            $tuitionAmount = count($tuitionMonths) * $this->currentAcademicYear->tuition_fee;
+            // ຄິດໄລ່ຈຳນວນກ່ອນສ່ວນຫຼຸດ
+            $subtotal = $cash + $transfer + $foodMoney + $lateFee;
+
+            // ຄິດໄລ່ສ່ວນຫຼຸດ
+            $discountAmount = $this->calculateDiscountAmount($discountId, $subtotal);
+
+            // ຄິດໄລ່ລວມສຸດທ້າຍ
+            $total = max(0, $subtotal - $discountAmount);
+
+            // ອັບເດດຄ່າໃນ form
+            $set('discount_amount', $discountAmount);
+            $set('discount_amount_view', $this->formatMoney($discountAmount));
+            $set('total_amount', $total);
+            $set('total_amount_view', $this->formatMoney($total));
+
+        } catch (\Exception $e) {
+            Log::error('Error in calculateTotal: ' . $e->getMessage());
+
+            // ຕັ້ງຄ່າເປັນ 0 ຖ້າມີ error
+            $set('discount_amount', 0);
+            $set('discount_amount_view', '0');
+            $set('total_amount', 0);
+            $set('total_amount_view', '0');
         }
-
-        // ຄິດໄລ່ຄ່າອາຫານ
-        $foodAmount = 0;
-        if ($this->selectedStudent && $this->currentAcademicYear && count($foodMonths) > 0) {
-            $foodAmount = $foodMoney; // ໃຊ້ຈຳນວນທີ່ປ້ອນເຂົ້າ
-        }
-
-        // ຈຳນວນລວມ
-        $total = $tuitionAmount + $foodAmount + $lateFee - $discountAmount;
-
-        $set('total_amount', $total);
-        $set('total_amount_view', number_format($total));
     }
 
     /**

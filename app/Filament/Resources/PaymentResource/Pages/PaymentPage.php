@@ -174,7 +174,7 @@ class PaymentPage extends Page implements HasForms, HasTable
                                 CheckboxList::make('food_months')
                                     ->hiddenLabel()
                                     ->options($this->getAvailableFoodMonths())
-                                    ->disableOptionWhen(fn(string $value): bool => in_array($value, $this->paidFoodMonths))
+                                    ->disableOptionWhen(fn(string $value): bool => in_array($value, $this->paidTuitionMonths))
                                     ->columns(3)
                                     ->columnSpanFull()
                                     ->live()
@@ -476,16 +476,6 @@ class PaymentPage extends Page implements HasForms, HasTable
             $set('discount_amount_view', $this->formatMoney($discountAmount));
             $set('total_amount', $total);
             $set('total_amount_view', $this->formatMoney($total));
-
-            Log::info('Payment calculation', [
-                'cash' => $cash,
-                'transfer' => $transfer,
-                'food_money' => $foodMoney,
-                'late_fee' => $lateFee,
-                'subtotal' => $subtotal,
-                'discount_amount' => $discountAmount,
-                'total' => $total
-            ]);
 
         } catch (\Exception $e) {
             Log::error('Error in calculateTotal: ' . $e->getMessage());
