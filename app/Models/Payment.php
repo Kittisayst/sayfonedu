@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class Payment extends Model
 {
@@ -78,7 +79,12 @@ class Payment extends Model
 
     public function images(): HasMany
     {
-        return $this->hasMany(PaymentImage::class, 'payment_id');
+        return $this->hasMany(PaymentImage::class, 'payment_id', 'payment_id');
+    }
+
+    public function getImageUrlAttribute(): string
+    {
+        return Storage::disk('public')->url($this->image_path);
     }
 
     /**

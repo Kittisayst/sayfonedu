@@ -334,103 +334,222 @@ class PaymentResource extends Resource
     /**
      * ✅ ຂໍ້ມູນລະອຽດສຳລັບການເບິ່ງ - ໃຊ້ Model methods
      */
+
+    /**
+     * ✅ ຂໍ້ມູນລະອຽດສຳລັບການເບິ່ງ - ເວີສຊັນປັບປຸງ
+     */
     public static function infolist(Infolist $infolist): Infolist
     {
         return $infolist
             ->schema([
+                // 📋 ຂໍ້ມູນການຊຳລະຫຼັກ
                 Section::make('ຂໍ້ມູນການຊຳລະ')
+                    ->description('ລາຍລະອຽດການຊຳລະເງິນ')
+                    ->icon('heroicon-o-banknotes')
                     ->schema([
                         TextEntry::make('receipt_number')
                             ->label('ເລກໃບບິນ')
-                            ->weight(FontWeight::Bold)
-                            ->copyable(),
+                            ->weight('bold')
+                            ->copyable()
+                            ->copyMessage('ເລກໃບບິນຖືກຄັດລອກແລ້ວ')
+                            ->icon('heroicon-o-document-text'),
 
                         TextEntry::make('payment_date')
                             ->label('ວັນທີຊຳລະ')
-                            ->dateTime('d/m/Y H:i:s'),
+                            ->dateTime('d/m/Y H:i:s')
+                            ->icon('heroicon-o-calendar-days'),
 
                         TextEntry::make('payment_status')
-                            ->label('ສະຖານະ')
+                            ->label('ສະຖານະການຊຳລະ')
                             ->badge()
                             ->color(fn(Payment $record): string => $record->getStatusBadgeColor())
-                            ->formatStateUsing(fn(Payment $record): string => $record->getStatusLabel()),
+                            ->formatStateUsing(fn(Payment $record): string => $record->getStatusLabel())
+                            ->icon(fn(Payment $record): string => match ($record->payment_status) {
+                                'pending' => 'heroicon-o-clock',
+                                'confirmed' => 'heroicon-o-check-circle',
+                                'cancelled' => 'heroicon-o-x-circle',
+                                default => 'heroicon-o-question-mark-circle'
+                            }),
                     ])
-                    ->columns(3),
+                    ->columns(3)
+                    ->collapsible(),
 
+                // 👤 ຂໍ້ມູນນັກຮຽນ
                 Section::make('ຂໍ້ມູນນັກຮຽນ')
+                    ->description('ລາຍລະອຽດຂອງນັກຮຽນທີ່ຊຳລະ')
+                    ->icon('heroicon-o-user')
                     ->schema([
                         TextEntry::make('student.student_code')
-                            ->label('ລະຫັດນັກຮຽນ'),
+                            ->label('ລະຫັດນັກຮຽນ')
+                            ->weight('bold')
+                            ->copyable(),
 
                         TextEntry::make('student.full_name')
-                            ->label('ຊື່ນັກຮຽນ')
-                            ->getStateUsing(fn(Payment $record): string => $record->student?->getFullName() ?? 'N/A'),
+                            ->label('ຊື່-ນາມສະກຸນ')
+                            ->getStateUsing(fn(Payment $record): string => $record->student?->getFullName() ?? 'ບໍ່ມີຂໍ້ມູນ')
+                            ->weight('semibold'),
+
+                        TextEntry::make('student.class_name')
+                            ->label('ຫ້ອງຮຽນ')
+                            ->placeholder('ບໍ່ລະບຸ')
+                            ->badge()
+                            ->color('info'),
 
                         TextEntry::make('academicYear.year_name')
-                            ->label('ສົກຮຽນ'),
-                    ])
-                    ->columns(3),
+                            ->label('ສົກຮຽນ')
+                            ->badge()
+                            ->color('success'),
 
-                Section::make('ລາຍລະອຽດເງິນ')
+                        TextEntry::make('student.phone')
+                            ->label('ເບີໂທ')
+                            ->placeholder('ບໍ່ມີຂໍ້ມູນ')
+                            ->url(fn(?string $state): ?string => $state ? "tel:{$state}" : null)
+                            ->openUrlInNewTab(false),
+
+                        TextEntry::make('student.email')
+                            ->label('ອີເມລ')
+                            ->placeholder('ບໍ່ມີຂໍ້ມູນ')
+                            ->url(fn(?string $state): ?string => $state ? "mailto:{$state}" : null)
+                            ->openUrlInNewTab(false),
+                    ])
+                    ->columns(3)
+                    ->collapsible(),
+
+                // 💰 ລາຍລະອຽດເງິນ
+                Section::make('ລາຍລະອຽດການເງິນ')
+                    ->description('ຈຳນວນເງິນແຕ່ລະປະເພດ')
+                    ->icon('heroicon-o-currency-dollar')
                     ->schema([
                         TextEntry::make('cash')
-                            ->label('ເງິນສົດ')
-                            ->money('LAK'),
+                            ->label('ເງິນສົດ (LAK)')
+                            ->money('LAK')
+                            ->color(fn($state) => $state > 0 ? 'success' : 'gray')
+                            ->weight(fn($state) => $state > 0 ? 'bold' : 'normal'),
 
                         TextEntry::make('transfer')
-                            ->label('ເງິນໂອນ')
-                            ->money('LAK'),
+                            ->label('ເງິນໂອນ (LAK)')
+                            ->money('LAK')
+                            ->color(fn($state) => $state > 0 ? 'info' : 'gray')
+                            ->weight(fn($state) => $state > 0 ? 'bold' : 'normal'),
 
                         TextEntry::make('food_money')
-                            ->label('ຄ່າອາຫານ')
-                            ->money('LAK'),
+                            ->label('ຄ່າອາຫານ (LAK)')
+                            ->money('LAK')
+                            ->color(fn($state) => $state > 0 ? 'warning' : 'gray')
+                            ->weight(fn($state) => $state > 0 ? 'bold' : 'normal'),
 
                         TextEntry::make('late_fee')
-                            ->label('ຄ່າປັບຊ້າ')
-                            ->money('LAK'),
+                            ->label('ຄ່າປັບຊ້າ (LAK)')
+                            ->money('LAK')
+                            ->color(fn($state) => $state > 0 ? 'danger' : 'gray')
+                            ->weight(fn($state) => $state > 0 ? 'bold' : 'normal'),
 
                         TextEntry::make('discount_amount')
-                            ->label('ສ່ວນຫຼຸດ')
-                            ->money('LAK'),
+                            ->label('ສ່ວນຫຼຸດ (LAK)')
+                            ->money('LAK')
+                            ->color(fn($state) => $state > 0 ? 'success' : 'gray')
+                            ->weight(fn($state) => $state > 0 ? 'bold' : 'normal')
+                            ->prefix('-'),
 
                         TextEntry::make('total_amount')
-                            ->label('ລວມທັງໝົດ')
+                            ->label('ລວມທັງໝົດ (LAK)')
                             ->money('LAK')
-                            ->weight(FontWeight::Bold)
-                            ->color(Color::Green),
+                            ->weight('bold')
+                            ->color('primary')
+                            ->size('lg'),
                     ])
-                    ->columns(3),
+                    ->columns(3)
+                    ->collapsible(),
 
-                Section::make('ເດືອນທີ່ຊຳລະ')
+                // 📝 ໝາຍເຫດ ແລະ ຂໍ້ມູນເພີ່ມເຕີມ
+                Section::make('ໝາຍເຫດ ແລະ ຂໍ້ມູນເພີ່ມເຕີມ')
+                    ->description('ຂໍ້ມູນເພີ່ມເຕີມຂອງການຊຳລະ')
+                    ->icon('heroicon-o-document-text')
                     ->schema([
-                        // ✅ ໃຊ້ Model method getTuitionMonthsDisplay()
-                        TextEntry::make('tuition_months')
-                            ->label('ເດືອນຄ່າຮຽນ')
-                            ->getStateUsing(fn(Payment $record): string => $record->getTuitionMonthsDisplay()),
-
-                        // ✅ ໃຊ້ Model method getFoodMonthsDisplay()
-                        TextEntry::make('food_months')
-                            ->label('ເດືອນຄ່າອາຫານ')
-                            ->getStateUsing(fn(Payment $record): string => $record->getFoodMonthsDisplay()),
-                    ])
-                    ->columns(2),
-
-                Section::make('ຂໍ້ມູນເພີ່ມເຕີມ')
-                    ->schema([
-                        TextEntry::make('receiver.username')
-                            ->label('ຜູ້ຮັບເງິນ'),
-
                         TextEntry::make('note')
                             ->label('ໝາຍເຫດ')
-                            ->placeholder('ບໍ່ມີໝາຍເຫດ'),
+                            ->placeholder('ບໍ່ມີໝາຍເຫດ')
+                            ->columnSpanFull()
+                            ->html(),
 
-                        ImageEntry::make('images.image_path')
-                            ->label('ຮູບໃບບິນ')
-                            ->disk('public')
-                            ->height(200)
-                            ->width(200),
+                        TextEntry::make('created_at')
+                            ->label('ວັນທີສ້າງ')
+                            ->dateTime('d/m/Y H:i:s')
+                            ->since(),
+
+                        TextEntry::make('updated_at')
+                            ->label('ວັນທີອັບເດດ')
+                            ->dateTime('d/m/Y H:i:s')
+                            ->since(),
+
+                        TextEntry::make('user.name')
+                            ->label('ຜູ້ບັນທຶກ')
+                            ->placeholder('ບໍ່ມີຂໍ້ມູນ')
+                            ->badge()
+                            ->color('gray'),
                     ])
-                    ->columns(2),
+                    ->columns(3)
+                    ->collapsible()
+                    ->collapsed(), // ຫຍໍ້ໂດຍຕັ້ງຕົ້ນ
+
+                // 📷 ຮູບພາບຫຼັກຖານ (ຖ້າມີ)
+                Section::make('ຮູບພາບຫຼັກຖານ')
+                    ->description('ຮູບພາບໃບເສັດ ຫຼື ໃບບິນ')
+                    ->icon('heroicon-o-photo')
+                    ->schema([
+                        // ກວດສອບຂໍ້ມູນກ່ອນ
+                        TextEntry::make('debug_images')
+                            ->label('Debug ຂໍ້ມູນຮູບພາບ')
+                            ->getStateUsing(function (Payment $record): string {
+                                $count = $record->images()->count();
+                                $paths = $record->images()->pluck('image_path')->toArray();
+
+                                return "ຈຳນວນຮູບພາບ: {$count}\nPath: " . implode(', ', $paths);
+                            })
+                            ->visible(fn(): bool => config('app.debug', false)),
+
+                        ImageEntry::make('payment_images')
+                            ->label('')
+                            ->height(150)
+                            ->width(200)
+                            ->extraImgAttributes(['class' => 'rounded-lg shadow-md cursor-pointer'])
+                            ->getStateUsing(function (Payment $record) {
+                                // ທົດສອບແບບງ່າຍກ່ອນ
+                                $imagePaths = $record->images()->pluck('image_path')->toArray();
+
+                                // ເພີ່ມ base URL ຖ້າຈຳເປັນ
+                                return array_map(function ($path) {
+                                    // ຖ້າ path ບໍ່ມີ storage/app/public ໃຫ້ເພີ່ມ
+                                    if (!str_starts_with($path, 'http') && !str_starts_with($path, '/storage')) {
+                                        return '/storage/' . $path;
+                                    }
+                                    return $path;
+                                }, $imagePaths);
+                            })
+                            ->visible(fn(Payment $record): bool => $record->images()->count() > 0),
+
+                        // ເພີ່ມຂໍ້ມູນລາຍລະອຽດຮູບພາບ
+                        TextEntry::make('image_details')
+                            ->label('ລາຍລະອຽດຮູບພາບ')
+                            ->formatStateUsing(function (Payment $record): string {
+                                $images = $record->images;
+
+                                if ($images->isEmpty()) {
+                                    return 'ບໍ່ມີຮູບພາບ';
+                                }
+
+                                $details = [];
+                                foreach ($images as $image) {
+                                    $details[] = "📄 " . basename($image->image_path);
+                                }
+
+                                return implode("\n", $details);
+                            })
+                            ->html()
+                            ->visible(fn(Payment $record): bool => $record->images()->count() > 0),
+                    ])
+                    ->visible(fn(Payment $record): bool => $record->images()->count() > 0)
+                    ->collapsible(),
             ]);
     }
 
