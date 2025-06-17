@@ -20,6 +20,12 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
+use Filament\Tables\Actions\ViewAction;
+use Filament\Tables\Columns\BadgeColumn;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
+use Filament\Tables\Contracts\HasTable;
+use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Forms\Get;
 use Filament\Forms\Set;
 use Filament\Notifications\Notification;
@@ -31,9 +37,9 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
 
-class PaymentPage extends Page implements HasForms
+class PaymentPage extends Page implements HasForms, HasTable
 {
-    use InteractsWithForms;
+    use InteractsWithForms, InteractsWithTable;
 
     protected static string $resource = PaymentResource::class;
     protected static string $view = 'filament.resources.payment-resource.pages.payment-page';
@@ -58,6 +64,8 @@ class PaymentPage extends Page implements HasForms
     public array $paidTuitionMonths = [];
     public array $paidFoodMonths = [];
 
+    public ?Collection $paymentHistory;
+
     /**
      * ເລີ່ມຕົ້ນເມື່ອໂຫຼດໜ້າ
      */
@@ -68,6 +76,7 @@ class PaymentPage extends Page implements HasForms
 
         // ຕັ້ງຄ່າ default values
         $receiptNo = Payment::generateReceiptNumber();
+
         $this->form->fill([
             "receipt_number" => $receiptNo,
             "receipt_number_view" => $receiptNo,
@@ -326,6 +335,107 @@ class PaymentPage extends Page implements HasForms
             ->statePath('data');
     }
 
+    public function table(Table $table): Table
+    {
+        return $table
+            ->query(
+                Payment::query()
+                    ->when($this->selectedStudent, function ($query) {
+                        $query->where('student_id', $this->selectedStudent->student_id)
+                            ->where('academic_year_id', $this->currentAcademicYear?->academic_year_id);
+                    })
+                    ->whereIn('payment_status', ['confirmed', 'pending'])
+                    ->with(['receiver', 'discount'])
+                    ->latest('payment_date')
+            )
+            ->columns([
+                TextColumn::make('receipt_number')
+                    ->label('ເລກໃບບິນ')
+                    ->searchable()
+                    ->copyable()
+                    ->weight('bold'),
+
+                TextColumn::make('payment_date')
+                    ->label('ວັນທີຊຳລະ')
+                    ->dateTime('d/m/Y H:i')
+                    ->sortable(),
+
+                TextColumn::make('total_amount')
+                    ->label('ຈຳນວນເງິນ')
+                    ->money('LAK')
+                    ->color('success')
+                    ->weight('bold'),
+
+                BadgeColumn::make('payment_status')
+                    ->label('ສະຖານະ')
+                    ->colors([
+                        'warning' => 'pending',
+                        'success' => 'confirmed',
+                        'danger' => 'cancelled',
+                    ])
+                    ->formatStateUsing(fn(string $state): string => match ($state) {
+                        'pending' => 'ລໍຖ້າຢືນຢັນ',
+                        'confirmed' => 'ຢືນຢັນແລ້ວ',
+                        'cancelled' => 'ຍົກເລີກ',
+                        'refunded' => 'ຄືນເງິນ',
+                        default => $state,
+                    }),
+
+                TextColumn::make('tuition_months')
+                    ->label('ເດືອນຄ່າຮຽນ')
+                    ->getStateUsing(function (Payment $record): string {
+                        $months = $record->getTuitionMonthsSafe();
+                        if (empty($months))
+                            return '-';
+
+                        $monthNames = array_map(fn($month) => Payment::getMonthName($month), $months);
+                        return implode(', ', $monthNames);
+                    })
+                    ->badge()
+                    ->color('success')
+                    ->separator(','),
+
+                TextColumn::make('food_months')
+                    ->label('ເດືອນຄ່າອາຫານ')
+                    ->getStateUsing(function (Payment $record): string {
+                        $months = $record->getFoodMonthsSafe();
+                        if (empty($months))
+                            return '-';
+
+                        $monthNames = array_map(fn($month) => Payment::getMonthName($month), $months);
+                        return implode(', ', $monthNames);
+                    })
+                    ->badge()
+                    ->color('info')
+                    ->separator(','),
+
+                TextColumn::make('receiver.username')
+                    ->label('ຜູ້ຮັບເງິນ')
+                    ->default('ບໍ່ມີຂໍ້ມູນ'),
+
+                TextColumn::make('note')
+                    ->label('ໝາຍເຫດ')
+                    ->limit(30)
+                    ->tooltip(function (TextColumn $column): ?string {
+                        $state = $column->getState();
+                        return strlen($state) > 30 ? $state : null;
+                    }),
+            ])
+            ->actions([
+                ViewAction::make()
+                    ->label('ເບິ່ງ')
+                    ->url(fn(Payment $record): string => route('filament.admin.resources.payments.view', $record))
+                    ->openUrlInNewTab(),
+            ])
+            ->bulkActions([])
+            ->emptyStateHeading('ບໍ່ມີປະຫວັດການຊຳລະ')
+            ->emptyStateDescription('ນັກຮຽນຄົນນີ້ຍັງບໍ່ໄດ້ຊຳລະຄ່າທຳນຽມໃນສົກຮຽນນີ້')
+            ->emptyStateIcon('heroicon-o-clock')
+            ->striped()
+            ->paginated([5, 10, 25])
+            ->defaultPaginationPageOption(10);
+    }
+
     /**
      * ✅ ປັບປຸງການຄິດໄລ່ລວມເງິນ
      */
@@ -512,8 +622,10 @@ class PaymentPage extends Page implements HasForms
                 $this->selectedStudent->student_id,
                 $this->currentAcademicYear?->academic_year_id
             );
+            $this->loadPaymentHistory();
             $this->resetSearchInterface();
             $this->notifyStudentSelected();
+
         }
     }
 
@@ -585,7 +697,7 @@ class PaymentPage extends Page implements HasForms
             $this->preparePaymentData($data);
 
             // Show confirmation modal
-            // $this->showConfirmModal = true;
+            $this->showConfirmModal = true;
 
         } catch (\Exception $e) {
             Notification::make()
@@ -689,20 +801,11 @@ class PaymentPage extends Page implements HasForms
                 "late_fee" => $this->pendingPaymentData['late_fee'],
                 "note" => $this->pendingPaymentData['note'],
                 "received_by" => $this->pendingPaymentData['received_by'],
-                "payment_status" => "confirmed", // ຕັ້ງເປັນ confirmed ທັນທີ
+                "payment_status" => "pending", // ຕັ້ງເປັນ confirmed ທັນທີ
             ]);
 
-            // Save payment images if any
-            if (!empty($this->pendingPaymentData['image_paths'])) {
-                foreach ($this->pendingPaymentData['image_paths'] as $imagePath) {
-                    PaymentImage::create([
-                        'payment_id' => $payment->payment_id,
-                        'image_path' => $imagePath,
-                        'image_type' => 'receipt',
-                        'upload_date' => now()
-                    ]);
-                }
-            }
+            // ✅ ປັບປຸງການບັນທຶກຮູບພາບ
+            $this->savePaymentImages($payment);
 
             DB::commit();
 
@@ -739,6 +842,122 @@ class PaymentPage extends Page implements HasForms
     }
 
     /**
+     * ✅ ເພີ່ມ method ສຳລັບການບັນທຶກຮູບພາບ
+     */
+    private function savePaymentImages(Payment $payment): void
+    {
+        try {
+            // ດຶງຮູບພາບຈາກ form data
+            $formData = $this->form->getState();
+            $imagePaths = $formData['image_path'] ?? [];
+
+            if (empty($imagePaths) || !is_array($imagePaths)) {
+                Log::info('No images to save for payment', ['payment_id' => $payment->payment_id]);
+                return;
+            }
+
+            foreach ($imagePaths as $imagePath) {
+                if (empty($imagePath) || !is_string($imagePath)) {
+                    continue;
+                }
+
+                // ກວດສອບວ່າໄຟລ์ມີຢູ່ຈິງ
+                if (!Storage::disk('public')->exists($imagePath)) {
+                    Log::warning('Image file not found', [
+                        'payment_id' => $payment->payment_id,
+                        'image_path' => $imagePath
+                    ]);
+                    continue;
+                }
+
+                // ດຶງຂໍ້ມູນໄຟລ์
+                $fileInfo = $this->getFileInfo($imagePath);
+
+                // ບັນທຶກລາຍການຮູບພາບ
+                $paymentImage = PaymentImage::create([
+                    'payment_id' => $payment->payment_id,
+                    'image_path' => $imagePath,
+                    'image_type' => $this->determineImageType($imagePath),
+                    'file_size' => $fileInfo['size'],
+                    'mime_type' => $fileInfo['mime_type'],
+                    'upload_date' => now(),
+                ]);
+
+                Log::info('Payment image saved successfully', [
+                    'payment_id' => $payment->payment_id,
+                    'image_id' => $paymentImage->image_id,
+                    'image_path' => $imagePath,
+                    'file_size' => $fileInfo['size']
+                ]);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Error saving payment images: ' . $e->getMessage(), [
+                'payment_id' => $payment->payment_id,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            // ບໍ່ throw exception ເພື່ອບໍ່ໃຫ້ການບັນທຶກ payment ລົ້ມແຫຼວ
+            // ແຕ່ສົ່ງ notification ແຈ້ງເຕືອນ
+            Notification::make()
+                ->title('ເຕືອນ')
+                ->body('ບັນທຶກການຊຳລະສຳເລັດ ແຕ່ມີບັນຫາໃນການບັນທຶກຮູບພາບບາງຮູບ')
+                ->warning()
+                ->send();
+        }
+    }
+
+    /**
+     * ✅ ດຶງຂໍ້ມູນໄຟລ์
+     */
+    private function getFileInfo(string $imagePath): array
+    {
+        try {
+            $fullPath = Storage::disk('public')->path($imagePath);
+            $size = Storage::disk('public')->size($imagePath);
+            $mimeType = Storage::disk('public')->mimeType($imagePath);
+
+            return [
+                'size' => $size,
+                'mime_type' => $mimeType,
+                'extension' => pathinfo($imagePath, PATHINFO_EXTENSION)
+            ];
+
+        } catch (\Exception $e) {
+            Log::warning('Could not get file info', [
+                'image_path' => $imagePath,
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'size' => 0,
+                'mime_type' => 'unknown',
+                'extension' => 'unknown'
+            ];
+        }
+    }
+
+    /**
+     * ✅ ກຳນົດປະເພດຮູບພາບຕາມຊື່ໄຟລ์
+     */
+    private function determineImageType(string $imagePath): string
+    {
+        $fileName = strtolower(basename($imagePath));
+
+        // ກວດສອບຈາກຊື່ໄຟລ์
+        if (str_contains($fileName, 'transfer') || str_contains($fileName, 'ໂອນ')) {
+            return 'transfer_slip';
+        }
+
+        if (str_contains($fileName, 'receipt') || str_contains($fileName, 'ບິນ')) {
+            return 'receipt';
+        }
+
+        // default ເປັນໃບບິນ
+        return 'receipt';
+    }
+
+    /**
      * ✅ ເພີ່ມການກວດສອບກ່ອນບັນທຶກ
      */
     private function validateBeforeSave(): void
@@ -758,8 +977,8 @@ class PaymentPage extends Page implements HasForms
             throw new \Exception('ເລກໃບບິນນີ້ມີແລ້ວ ກະລຸນາສ້າງໃໝ່');
         }
 
-        // ກວດສອບເດືອນຊ້ຳອີກຄັ້ງ
-        $tuitionMonths = json_decode($this->pendingPaymentData['tuition_months'], true) ?? [];
+        // ✅ ກວດສອບເດືອນຊ້ຳອີກຄັ້ງ - ແກ້ໄຂ
+        $tuitionMonths = $this->pendingPaymentData['tuition_months'] ?? [];
         if (!empty($tuitionMonths)) {
             $paidTuitionMonths = Payment::getPaidTuitionMonths(
                 $this->selectedStudent->student_id,
@@ -767,11 +986,13 @@ class PaymentPage extends Page implements HasForms
             );
             $duplicateTuition = array_intersect($tuitionMonths, $paidTuitionMonths);
             if (!empty($duplicateTuition)) {
-                throw new \Exception('ເດືອນຄ່າຮຽນ ' . implode(', ', $duplicateTuition) . ' ໄດ້ຈ່າຍແລ້ວ');
+                // ✅ ແປງເປັນຊື່ເດືອນ
+                $monthNames = array_map(fn($month) => Payment::getMonthName($month), $duplicateTuition);
+                throw new \Exception('ເດືອນຄ່າຮຽນ ' . implode(', ', $monthNames) . ' ໄດ້ຈ່າຍແລ້ວ');
             }
         }
 
-        $foodMonths = json_decode($this->pendingPaymentData['food_months'], true) ?? [];
+        $foodMonths = $this->pendingPaymentData['food_months'] ?? [];
         if (!empty($foodMonths)) {
             $paidFoodMonths = Payment::getPaidFoodMonths(
                 $this->selectedStudent->student_id,
@@ -779,7 +1000,9 @@ class PaymentPage extends Page implements HasForms
             );
             $duplicateFood = array_intersect($foodMonths, $paidFoodMonths);
             if (!empty($duplicateFood)) {
-                throw new \Exception('ເດືອນຄ່າອາຫານ ' . implode(', ', $duplicateFood) . ' ໄດ້ຈ່າຍແລ້ວ');
+                // ✅ ແປງເປັນຊື່ເດືອນ
+                $monthNames = array_map(fn($month) => Payment::getMonthName($month), $duplicateFood);
+                throw new \Exception('ເດືອນຄ່າອາຫານ ' . implode(', ', $monthNames) . ' ໄດ້ຈ່າຍແລ້ວ');
             }
         }
     }
@@ -878,18 +1101,37 @@ class PaymentPage extends Page implements HasForms
     /**
      * ✅ ເພີ່ມ method ສຳລັບການຄົ້ນຫາປະຫວັດການຊຳລະ
      */
-    public function getStudentPaymentHistory(): Collection
+    /**
+     * ✅ ດຶງປະຫວັດການຊຳລະເດືອນຂອງນັກຮຽນ
+     */
+    public function loadPaymentHistory(): void
     {
-        if (!$this->selectedStudent) {
-            return collect();
+        if (!$this->selectedStudent || !$this->currentAcademicYear) {
+            $this->paidTuitionMonths = [];
+            $this->paidFoodMonths = [];
+            return;
         }
 
-        return Payment::where('student_id', $this->selectedStudent->student_id)
-            ->where('academic_year_id', $this->currentAcademicYear?->academic_year_id ?? 1)
-            ->whereIn('payment_status', ['confirmed', 'pending'])
-            ->orderBy('payment_date', 'desc')
-            ->limit(10)
-            ->get();
+        try {
+            // ດຶງເດືອນທີ່ຈ່າຍແລ້ວ
+            $this->paidTuitionMonths = Payment::getPaidTuitionMonths(
+                $this->selectedStudent->student_id,
+                $this->currentAcademicYear->academic_year_id
+            );
+
+            $this->paidFoodMonths = Payment::getPaidFoodMonths(
+                $this->selectedStudent->student_id,
+                $this->currentAcademicYear->academic_year_id
+            );
+
+            // ✅ Refresh table
+            $this->resetTable();
+
+        } catch (\Exception $e) {
+            Log::error('Error loading payment history: ' . $e->getMessage());
+            $this->paidTuitionMonths = [];
+            $this->paidFoodMonths = [];
+        }
     }
 
     /**

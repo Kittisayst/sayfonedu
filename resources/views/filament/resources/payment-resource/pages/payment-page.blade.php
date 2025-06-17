@@ -278,17 +278,15 @@
                             </div>
 
                             <!-- Modal Footer -->
-                            <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                                <button type="button" wire:click="confirmPayment"
-                                    class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 sm:ml-3 sm:w-auto sm:text-sm">
-                                    <x-filament::icon icon="heroicon-o-check-circle" class="h-5 w-5 mr-2" />
+                            <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse gap-3">
+                                <x-filament::button wire:click="confirmPayment" color="success" icon="heroicon-o-check-circle"
+                                    size="md">
                                     ຢືນຢັນ ແລະ ພິມໃບບິນ
-                                </button>
-                                <button type="button" wire:click="cancelPayment"
-                                    class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
-                                    <x-filament::icon icon="heroicon-o-x-mark" class="h-5 w-5 mr-2" />
+                                </x-filament::button>
+
+                                <x-filament::button wire:click="cancelPayment" color="gray" icon="heroicon-o-x-mark" size="md">
                                     ຍົກເລີກ
-                                </button>
+                                </x-filament::button>
                             </div>
                         </div>
                     </div>
@@ -300,12 +298,67 @@
                 <x-slot name="heading">
                     <div class="flex items-center gap-2">
                         <x-filament::icon icon="heroicon-o-clock" class="h-5 w-5 text-gray-500" />
-                        <span>ປະຫວັດການຊຳລະເງິນ</span>
+                        <span>ປະຫວັດການຊຳລະເງິນ ສົກຮຽນ {{ $currentAcademicYear?->year_name ?? 'ບໍ່ມີຂໍ້ມູນ' }}</span>
                     </div>
                 </x-slot>
 
-                {{-- ສ່ວນປະຫວັດການຊຳລະເງິນທີ່ຈະຖືກສ້າງໃນອະນາຄົດ --}}
+                @if ($selectedStudent)
+                    {{-- ສະຫຼຸບເດືອນທີ່ຈ່າຍແລ້ວ --}}
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                        {{-- ເດືອນຄ່າຮຽນທີ່ຈ່າຍແລ້ວ --}}
+                        <div class="bg-green-50 border border-green-200 rounded-lg p-4">
+                            <h4 class="font-semibold text-green-800 mb-2 flex items-center gap-2">
+                                <x-filament::icon icon="heroicon-o-academic-cap" class="h-4 w-4" />
+                                ເດືອນຄ່າຮຽນທີ່ຈ່າຍແລ້ວ ({{ count($paidTuitionMonths) }} ເດືອນ)
+                            </h4>
+                            @if (!empty($paidTuitionMonths))
+                                <div class="flex flex-wrap gap-1">
+                                    @foreach ($paidTuitionMonths as $month)
+                                        <span
+                                            class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800">
+                                            {{ \App\Models\Payment::getMonthName($month) }}
+                                        </span>
+                                    @endforeach
+                                </div>
+                            @else
+                                <p class="text-sm text-gray-500">ຍັງບໍ່ໄດ້ຈ່າຍຄ່າຮຽນ</p>
+                            @endif
+                        </div>
 
+                        {{-- ເດືອນຄ່າອາຫານທີ່ຈ່າຍແລ້ວ --}}
+                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <h4 class="font-semibold text-blue-800 mb-2 flex items-center gap-2">
+                                <x-filament::icon icon="heroicon-o-cake" class="h-4 w-4" />
+                                ເດືອນຄ່າອາຫານທີ່ຈ່າຍແລ້ວ ({{ count($paidFoodMonths) }} ເດືອນ)
+                            </h4>
+                            @if (!empty($paidFoodMonths))
+                                <div class="flex flex-wrap gap-1">
+                                    @foreach ($paidFoodMonths as $month)
+                                        <span
+                                            class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                            {{ \App\Models\Payment::getMonthName($month) }}
+                                        </span>
+                                    @endforeach
+                                </div>
+                            @else
+                                <p class="text-sm text-gray-500">ຍັງບໍ່ໄດ້ຈ່າຍຄ່າອາຫານ</p>
+                            @endif
+                        </div>
+                    </div>
+
+                    {{-- ✅ ໃຊ້ Filament Table ແທນ HTML Table --}}
+                    {{ $this->table }}
+
+                @else
+                    {{-- ກໍລະນີຍັງບໍ່ໄດ້ເລືອກນັກຮຽນ --}}
+                    <div class="text-center py-8">
+                        <div class="rounded-full bg-gray-50 p-3 mx-auto w-16 h-16 flex items-center justify-center mb-4">
+                            <x-filament::icon icon="heroicon-o-user-plus" class="h-8 w-8 text-gray-400" />
+                        </div>
+                        <h3 class="text-lg font-medium text-gray-900 mb-2">ເລືອກນັກຮຽນເພື່ອເບິ່ງປະຫວັດ</h3>
+                        <p class="text-gray-500">ກະລຸນາເລືອກນັກຮຽນເພື່ອເບິ່ງປະຫວັດການຊຳລະເງິນ</p>
+                    </div>
+                @endif
             </x-filament::section>
         @else
             {{-- ສ່ວນແນະນຳການໃຊ້ງານເມື່ອຍັງບໍ່ໄດ້ເລືອກນັກຮຽນ --}}
