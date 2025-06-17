@@ -82,65 +82,161 @@ class Payment extends Model
     }
 
     /**
-     * ✅ ປັບປຸງ Mutators ສຳລັບ JSON fields
+     * ✅ ແກ້ໄຂ getMonthOptions ໃຫ້ຖືກຕ້ອງ
      */
-    public function setTuitionMonthsAttribute($value)
+    public static function getMonthOptions(): array
     {
-        if (is_string($value)) {
-            $decoded = json_decode($value, true);
-            $this->attributes['tuition_months'] = json_encode(
-                is_array($decoded) ? array_values($decoded) : []
-            );
-        } elseif (is_array($value)) {
-            $this->attributes['tuition_months'] = json_encode(array_values($value));
-        } else {
-            $this->attributes['tuition_months'] = json_encode([]);
-        }
-    }
-
-    public function setFoodMonthsAttribute($value)
-    {
-        if (is_string($value)) {
-            $decoded = json_decode($value, true);
-            $this->attributes['food_months'] = json_encode(
-                is_array($decoded) ? array_values($decoded) : []
-            );
-        } elseif (is_array($value)) {
-            $this->attributes['food_months'] = json_encode(array_values($value));
-        } else {
-            $this->attributes['food_months'] = json_encode([]);
-        }
+        return [
+            '1' => 'ມັງກອນ',
+            '2' => 'ກຸມພາ',
+            '3' => 'ມີນາ',
+            '4' => 'ເມສາ',
+            '5' => 'ພຶດສະພາ',
+            '6' => 'ມິຖຸນາ',
+            '7' => 'ກໍລະກົດ',
+            '8' => 'ສິງຫາ',
+            '9' => 'ກັນຍາ',
+            '10' => 'ຕຸລາ',
+            '11' => 'ພະຈິກ',
+            '12' => 'ທັນວາ',
+        ];
     }
 
     /**
-     * ✅ ປັບປຸງ Accessors ສຳລັບ JSON fields
+     * ✅ ສຳລັບການສະແດງຜົນ
      */
-    public function getTuitionMonthsAttribute($value)
+    public static function getMonthName(string $monthNumber): string
     {
-        if (empty($value)) {
-            return [];
-        }
-
-        if (is_string($value)) {
-            $decoded = json_decode($value, true);
-            return is_array($decoded) ? $decoded : [];
-        }
-
-        return is_array($value) ? $value : [];
+        $months = self::getMonthOptions();
+        return $months[$monthNumber] ?? "ເດືອນທີ {$monthNumber}";
     }
 
-    public function getFoodMonthsAttribute($value)
+    /**
+     * ✅ ສຳລັບການແປງຈາກຊື່ເປັນເລກ
+     */
+    public static function getMonthNumber(string $monthName): ?string
     {
-        if (empty($value)) {
-            return [];
+        $months = array_flip(self::getMonthOptions());
+        return $months[$monthName] ?? null;
+    }
+
+    /**
+     * ✅ ດຶງຊື່ເດືອນຄ່າຮຽນ
+     */
+    public function getTuitionMonthNames(): array
+    {
+        $months = $this->tuition_months ?? [];
+        return array_map(function ($month) {
+            return self::getMonthName((string) $month);
+        }, $months);
+    }
+
+    /**
+     * ✅ ດຶງຊື່ເດືອນຄ່າອາຫານ
+     */
+    public function getFoodMonthNames(): array
+    {
+        $months = $this->food_months ?? [];
+        return array_map(function ($month) {
+            return self::getMonthName((string) $month);
+        }, $months);
+    }
+
+    public function getTuitionMonthsAsNumbers(): string
+    {
+        $months = $this->getSortedTuitionMonths();
+        if (empty($months)) {
+            return 'ບໍ່ມີ';
         }
 
-        if (is_string($value)) {
-            $decoded = json_decode($value, true);
-            return is_array($decoded) ? $decoded : [];
+        return implode(', ', $months);
+    }
+
+    public function getFoodMonthsAsNumbers(): string
+    {
+        $months = $this->getSortedFoodMonths();
+        if (empty($months)) {
+            return 'ບໍ່ມີ';
         }
 
-        return is_array($value) ? $value : [];
+        return implode(', ', $months);
+    }
+
+
+    /**
+     * ✅ ການ sort ເດືອນຕາມລຳດັບ
+     */
+    public function getSortedTuitionMonths(): array
+    {
+        $months = $this->tuition_months ?? [];
+
+        // ແປງເປັນ integer ສຳລັບ sort
+        $monthNumbers = array_map(function ($month) {
+            return (int) $month;
+        }, $months);
+
+        // Sort ແລ້ວ
+        sort($monthNumbers);
+        return $monthNumbers;
+    }
+
+    /**
+     * ✅ ການ sort ເດືອນຄ່າອາຫານຕາມລຳດັບ
+     */
+    public function getSortedFoodMonths(): array
+    {
+        $months = $this->food_months ?? [];
+
+        // ແປງເປັນ integer ສຳລັບ sort
+        $monthNumbers = array_map(function ($month) {
+            return (int) $month;
+        }, $months);
+
+        // Sort ແລ້ວ
+        sort($monthNumbers);
+        return $monthNumbers;
+    }
+
+    /**
+     * ✅ ການສະແດງຜົນເດືອນທີ່ຈ່າຍ
+     */
+    public function getTuitionMonthsDisplay(): string
+    {
+        $months = $this->getSortedTuitionMonths();
+        if (empty($months)) {
+            return 'ບໍ່ມີ';
+        }
+
+        $monthNames = array_map(fn($num) => self::getMonthName((string) $num), $months);
+        return implode(', ', $monthNames);
+    }
+
+    /**
+     * ✅ ການສະແດງຜົນເດືອນຄ່າອາຫານທີ່ຈ່າຍ
+     */
+    public function getFoodMonthsDisplay(): string
+    {
+        $months = $this->getSortedFoodMonths();
+        if (empty($months)) {
+            return 'ບໍ່ມີ';
+        }
+
+        $monthNames = array_map(fn($num) => self::getMonthName((string) $num), $months);
+        return implode(', ', $monthNames);
+    }
+
+    /**
+     * ✅ ກວດສອບວ່າຈ່າຍເດືອນໃດແລ້ວ
+     */
+    public function hasPaidMonth(string $monthNumber, string $type = 'tuition'): bool
+    {
+        $months = $type === 'tuition' ? $this->tuition_months : $this->food_months;
+
+        if (empty($months)) {
+            return false;
+        }
+
+        return in_array($monthNumber, $months);
     }
 
     /**
@@ -198,7 +294,7 @@ class Payment extends Model
     }
 
     /**
-     * ✅ ປັບປຸງ Helper Methods
+     * ✅ Helper Methods
      */
     public function getTotalCashAndTransfer(): float
     {
@@ -219,14 +315,12 @@ class Payment extends Model
 
     public function getTuitionMonthsFormatted(): string
     {
-        $months = $this->tuition_months;
-        return is_array($months) ? implode(', ', $months) : '';
+        return $this->getTuitionMonthsDisplay();
     }
 
     public function getFoodMonthsFormatted(): string
     {
-        $months = $this->food_months;
-        return is_array($months) ? implode(', ', $months) : 'ບໍ່ມີ';
+        return $this->getFoodMonthsDisplay();
     }
 
     /**
@@ -451,118 +545,6 @@ class Payment extends Model
     /**
      * Static Methods
      */
-    public static function getMonthOptions(): array
-    {
-        return [
-            1 => 'ມັງກອນ',
-            2 => 'ກຸມພາ',
-            3 => 'ມີນາ',
-            4 => 'ເມສາ',
-            5 => 'ພຶດສະພາ',
-            6 => 'ມິຖຸນາ',
-            7 => 'ກໍລະກົດ',
-            8 => 'ສິງຫາ',
-            9 => 'ກັນຍາ',
-            10 => 'ຕຸລາ',
-            11 => 'ພະຈິກ',
-            12 => 'ທັນວາ',
-        ];
-    }
-
-    /**
-     * ✅ ສຳລັບການສະແດງຜົນ
-     */
-    public static function getMonthName(int $monthNumber): string
-    {
-        $months = self::getMonthOptions();
-        return $months[$monthNumber] ?? 'ບໍ່ຮູ້ຈັກ';
-    }
-
-    /**
-     * ✅ ສຳລັບການແປງຈາກຊື່ເປັນເລກ
-     */
-    public static function getMonthNumber(string $monthName): ?int
-    {
-        $months = array_flip(self::getMonthOptions());
-        return $months[$monthName] ?? null;
-    }
-
-    /**
-     * ✅ ດຶງຊື່ເດືອນຄ່າຮຽນ
-     */
-    public function getTuitionMonthNames(): array
-    {
-        $months = $this->tuition_months ?? [];
-        return array_map(function ($month) {
-            return is_numeric($month) ? self::getMonthName((int) $month) : $month;
-        }, $months);
-    }
-
-    /**
-     * ✅ ດຶງຊື່ເດືອນຄ່າອາຫານ
-     */
-    public function getFoodMonthNames(): array
-    {
-        $months = $this->food_months ?? [];
-        return array_map(function ($month) {
-            return is_numeric($month) ? self::getMonthName((int) $month) : $month;
-        }, $months);
-    }
-
-    /**
-     * ✅ ການ sort ເດືອນຕາມລຳດັບ
-     */
-    public function getSortedTuitionMonths(): array
-    {
-        $months = $this->tuition_months ?? [];
-
-        // ຖ້າເປັນຊື່ເດືອນ, ແປງເປັນເລກກ່ອນ
-        $monthNumbers = array_map(function ($month) {
-            if (is_numeric($month)) {
-                return (int) $month;
-            }
-            return self::getMonthNumber($month) ?? 0;
-        }, $months);
-
-        // Sort ແລ້ວ
-        sort($monthNumbers);
-        return $monthNumbers;
-    }
-
-    /**
-     * ✅ ການສະແດງຜົນເດືອນທີ່ຈ່າຍ
-     */
-    public function getTuitionMonthsDisplay(): string
-    {
-        $months = $this->getSortedTuitionMonths();
-        $monthNames = array_map(fn($num) => self::getMonthName($num), $months);
-        return implode(', ', $monthNames);
-    }
-
-    /**
-     * ✅ ກວດສອບວ່າຈ່າຍເດືອນໃດແລ້ວ
-     */
-    public function hasPaidMonth(int $monthNumber, string $type = 'tuition'): bool
-    {
-        $months = $type === 'tuition' ? $this->tuition_months : $this->food_months;
-
-        if (empty($months)) {
-            return false;
-        }
-
-        foreach ($months as $month) {
-            if (is_numeric($month) && (int) $month === $monthNumber) {
-                return true;
-            }
-            if (!is_numeric($month) && self::getMonthNumber($month) === $monthNumber) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-
     public static function getStatusOptions(): array
     {
         return [
@@ -646,21 +628,6 @@ class Payment extends Model
             if (empty($payment->received_by)) {
                 $payment->received_by = auth()->id();
             }
-
-            // ກວດສອບຂໍ້ມູນ JSON
-            if (is_string($payment->tuition_months)) {
-                $decoded = json_decode($payment->tuition_months, true);
-                if (json_last_error() !== JSON_ERROR_NONE) {
-                    $payment->tuition_months = [];
-                }
-            }
-
-            if (is_string($payment->food_months)) {
-                $decoded = json_decode($payment->food_months, true);
-                if (json_last_error() !== JSON_ERROR_NONE) {
-                    $payment->food_months = [];
-                }
-            }
         });
 
         static::updating(function ($payment) {
@@ -672,21 +639,6 @@ class Payment extends Model
                     'new_status' => $payment->payment_status,
                     'user_id' => auth()->id()
                 ]);
-            }
-
-            // ກວດສອບຂໍ້ມູນ JSON ເມື່ອ update
-            if ($payment->isDirty('tuition_months') && is_string($payment->tuition_months)) {
-                $decoded = json_decode($payment->tuition_months, true);
-                if (json_last_error() !== JSON_ERROR_NONE) {
-                    $payment->tuition_months = $payment->getOriginal('tuition_months');
-                }
-            }
-
-            if ($payment->isDirty('food_months') && is_string($payment->food_months)) {
-                $decoded = json_decode($payment->food_months, true);
-                if (json_last_error() !== JSON_ERROR_NONE) {
-                    $payment->food_months = $payment->getOriginal('food_months');
-                }
             }
         });
     }

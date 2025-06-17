@@ -30,21 +30,15 @@ use Filament\Support\Colors\Color;
 class PaymentResource extends Resource
 {
     protected static ?string $model = Payment::class;
-
     protected static ?string $navigationIcon = 'heroicon-o-banknotes';
-
     protected static ?string $navigationLabel = 'ການຊຳລະເງິນ';
-
     protected static ?string $modelLabel = 'ການຊຳລະເງິນ';
-
     protected static ?string $pluralModelLabel = 'ການຊຳລະເງິນ';
-
     protected static ?string $navigationGroup = 'ການເງິນ';
-
     protected static ?int $navigationSort = 1;
 
     /**
-     * ຟອມສຳລັບສ້າງ/ແກ້ໄຂການຊຳລະ
+     * ✅ ຟອມສຳລັບສ້າງ/ແກ້ໄຂການຊຳລະ - ໃຊ້ Model methods
      */
     public static function form(Form $form): Form
     {
@@ -76,7 +70,7 @@ class PaymentResource extends Resource
                                 Forms\Components\TextInput::make('receipt_number')
                                     ->label('ເລກໃບບິນ')
                                     ->required()
-                                    ->default(fn() => 'PAY-' . now()->format('YmdHis'))
+                                    ->default(fn() => Payment::generateReceiptNumber())
                                     ->unique(ignoreRecord: true),
 
                                 Forms\Components\DateTimePicker::make('payment_date')
@@ -87,12 +81,7 @@ class PaymentResource extends Resource
 
                                 Forms\Components\Select::make('payment_status')
                                     ->label('ສະຖານະ')
-                                    ->options([
-                                        'pending' => 'ລໍຖ້າຢືນຢັນ',
-                                        'confirmed' => 'ຢືນຢັນແລ້ວ',
-                                        'cancelled' => 'ຍົກເລີກ',
-                                        'refunded' => 'ຄືນເງິນ',
-                                    ])
+                                    ->options(Payment::getStatusOptions())
                                     ->default('pending')
                                     ->required(),
                             ]),
@@ -164,6 +153,7 @@ class PaymentResource extends Resource
                     ->schema([
                         Forms\Components\Grid::make(2)
                             ->schema([
+                                // ✅ ໃຊ້ Payment::getMonthOptions() ຈາກ Model
                                 Forms\Components\CheckboxList::make('tuition_months')
                                     ->label('ເດືອນຄ່າຮຽນ')
                                     ->options(Payment::getMonthOptions())
@@ -171,6 +161,7 @@ class PaymentResource extends Resource
                                     ->required()
                                     ->columnSpan(1),
 
+                                // ✅ ໃຊ້ Payment::getMonthOptions() ຈາກ Model
                                 Forms\Components\CheckboxList::make('food_months')
                                     ->label('ເດືອນຄ່າອາຫານ')
                                     ->options(Payment::getMonthOptions())
@@ -196,7 +187,6 @@ class PaymentResource extends Resource
 
                         Forms\Components\FileUpload::make('payment_images')
                             ->label('ຮູບໃບບິນ/ໃບໂອນ')
-                            // ->relationship('images', 'image_path')
                             ->disk('public')
                             ->directory('payment_receipts')
                             ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/jpg'])
@@ -211,7 +201,7 @@ class PaymentResource extends Resource
     }
 
     /**
-     * ຕາຕະລາງສະແດງຂໍ້ມູນການຊຳລະ
+     * ✅ ຕາຕະລາງສະແດງຂໍ້ມູນການຊຳລະ - ໃຊ້ Model methods
      */
     public static function table(Table $table): Table
     {
@@ -266,13 +256,18 @@ class PaymentResource extends Resource
                         default => $state,
                     }),
 
-                Tables\Columns\TextColumn::make('tuition_months_count')
+                // ✅ ໃຊ້ Model method getTuitionMonthsDisplay()
+                Tables\Columns\TextColumn::make('tuition_months_display')
                     ->label('ເດືອນຄ່າຮຽນ')
-                    ->getStateUsing(
-                        fn(Payment $record): string =>
-                        count(json_decode($record->tuition_months, true) ?? []) . ' ເດືອນ'
-                    )
-                    ->alignCenter(),
+                    ->getStateUsing(fn(Payment $record): string => $record->getTuitionMonthsAsNumbers())
+                    ->wrap()
+                    ->toggleable(),
+
+                // ✅ ໃຊ້ Model method getFoodMonthsDisplay()
+                Tables\Columns\TextColumn::make('food_months_display')
+                    ->label('ເດືອນຄ່າອາຫານ')
+                    ->getStateUsing(fn(Payment $record): string => $record->getFoodMonthsAsNumbers())
+                    ->wrap(),
 
                 Tables\Columns\TextColumn::make('receiver.name')
                     ->label('ຜູ້ຮັບເງິນ')
@@ -284,63 +279,6 @@ class PaymentResource extends Resource
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
-            ->filters([
-                SelectFilter::make('payment_status')
-                    ->label('ສະຖານະ')
-                    ->options([
-                        'pending' => 'ລໍຖ້າຢືນຢັນ',
-                        'confirmed' => 'ຢືນຢັນແລ້ວ',
-                        'cancelled' => 'ຍົກເລີກ',
-                        'refunded' => 'ຄືນເງິນ',
-                    ])
-                    ->multiple(),
-
-                SelectFilter::make('academic_year')
-                    ->label('ສົກຮຽນ')
-                    ->relationship('academicYear', 'year_name')
-                    ->preload(),
-
-                Filter::make('payment_date')
-                    ->form([
-                        DatePicker::make('from')
-                            ->label('ຈາກວັນທີ'),
-                        DatePicker::make('until')
-                            ->label('ຫາວັນທີ'),
-                    ])
-                    ->query(function (Builder $query, array $data): Builder {
-                        return $query
-                            ->when(
-                                $data['from'],
-                                fn(Builder $query, $date): Builder => $query->whereDate('payment_date', '>=', $date),
-                            )
-                            ->when(
-                                $data['until'],
-                                fn(Builder $query, $date): Builder => $query->whereDate('payment_date', '<=', $date),
-                            );
-                    }),
-
-                Filter::make('amount_range')
-                    ->form([
-                        Forms\Components\TextInput::make('min_amount')
-                            ->label('ຈຳນວນເງິນຕ່ຳສຸດ')
-                            ->numeric(),
-                        Forms\Components\TextInput::make('max_amount')
-                            ->label('ຈຳນວນເງິນສູງສຸດ')
-                            ->numeric(),
-                    ])
-                    ->query(function (Builder $query, array $data): Builder {
-                        return $query
-                            ->when(
-                                $data['min_amount'],
-                                fn(Builder $query, $amount): Builder => $query->where('total_amount', '>=', $amount),
-                            )
-                            ->when(
-                                $data['max_amount'],
-                                fn(Builder $query, $amount): Builder => $query->where('total_amount', '<=', $amount),
-                            );
-                    }),
-            ], layout: FiltersLayout::AboveContent)
-            ->filtersFormColumns(4)
             ->actions([
                 Tables\Actions\ViewAction::make()
                     ->label('ເບິ່ງ'),
@@ -348,17 +286,14 @@ class PaymentResource extends Resource
                 ActionGroup::make([
                     Tables\Actions\EditAction::make()
                         ->label('ແກ້ໄຂ')
-                        ->visible(
-                            fn(Payment $record): bool =>
-                            $record->payment_status === 'pending' || auth()->user()->hasRole('admin')
-                        ),
+                        ->visible(fn(Payment $record): bool => $record->canBeEdited()),
 
                     Tables\Actions\Action::make('confirm')
                         ->label('ຢືນຢັນ')
                         ->icon('heroicon-o-check-circle')
                         ->color('success')
                         ->requiresConfirmation()
-                        ->visible(fn(Payment $record): bool => $record->payment_status === 'pending')
+                        ->visible(fn(Payment $record): bool => $record->isPending())
                         ->action(fn(Payment $record) => $record->update(['payment_status' => 'confirmed'])),
 
                     Tables\Actions\Action::make('cancel')
@@ -366,7 +301,7 @@ class PaymentResource extends Resource
                         ->icon('heroicon-o-x-circle')
                         ->color('danger')
                         ->requiresConfirmation()
-                        ->visible(fn(Payment $record): bool => $record->payment_status === 'pending')
+                        ->visible(fn(Payment $record): bool => $record->isPending())
                         ->action(fn(Payment $record) => $record->update(['payment_status' => 'cancelled'])),
 
                     Tables\Actions\Action::make('print_receipt')
@@ -378,7 +313,7 @@ class PaymentResource extends Resource
 
                     Tables\Actions\DeleteAction::make()
                         ->label('ລຶບ')
-                        ->visible(fn(): bool => auth()->user()->hasRole('admin')),
+                        ->visible(fn(Payment $record): bool => $record->canBeDeleted()),
                 ])
             ])
             ->bulkActions([
@@ -405,7 +340,7 @@ class PaymentResource extends Resource
     }
 
     /**
-     * ຂໍ້ມູນລະອຽດສຳລັບການເບິ່ງ
+     * ✅ ຂໍ້ມູນລະອຽດສຳລັບການເບິ່ງ - ໃຊ້ Model methods
      */
     public static function infolist(Infolist $infolist): Infolist
     {
@@ -425,19 +360,8 @@ class PaymentResource extends Resource
                         TextEntry::make('payment_status')
                             ->label('ສະຖານະ')
                             ->badge()
-                            ->color(fn(string $state): string => match ($state) {
-                                'pending' => 'warning',
-                                'confirmed' => 'success',
-                                'cancelled' => 'danger',
-                                'refunded' => 'info',
-                            })
-                            ->formatStateUsing(fn(string $state): string => match ($state) {
-                                'pending' => 'ລໍຖ້າຢືນຢັນ',
-                                'confirmed' => 'ຢືນຢັນແລ້ວ',
-                                'cancelled' => 'ຍົກເລີກ',
-                                'refunded' => 'ຄືນເງິນ',
-                                default => $state,
-                            }),
+                            ->color(fn(Payment $record): string => $record->getStatusBadgeColor())
+                            ->formatStateUsing(fn(Payment $record): string => $record->getStatusLabel()),
                     ])
                     ->columns(3),
 
@@ -487,19 +411,15 @@ class PaymentResource extends Resource
 
                 Section::make('ເດືອນທີ່ຊຳລະ')
                     ->schema([
+                        // ✅ ໃຊ້ Model method getTuitionMonthsDisplay()
                         TextEntry::make('tuition_months')
                             ->label('ເດືອນຄ່າຮຽນ')
-                            ->getStateUsing(
-                                fn(Payment $record): string =>
-                                implode(', ', json_decode($record->tuition_months, true) ?? [])
-                            ),
+                            ->getStateUsing(fn(Payment $record): string => $record->getTuitionMonthsDisplay()),
 
+                        // ✅ ໃຊ້ Model method getFoodMonthsDisplay()
                         TextEntry::make('food_months')
                             ->label('ເດືອນຄ່າອາຫານ')
-                            ->getStateUsing(
-                                fn(Payment $record): string =>
-                                implode(', ', json_decode($record->food_months, true) ?? []) ?: 'ບໍ່ມີ'
-                            ),
+                            ->getStateUsing(fn(Payment $record): string => $record->getFoodMonthsDisplay()),
                     ])
                     ->columns(2),
 
@@ -540,7 +460,7 @@ class PaymentResource extends Resource
      */
     public static function getNavigationBadge(): ?string
     {
-        return static::getModel()::where('payment_status', 'pending')->count();
+        return Payment::getPendingCount();
     }
 
     public static function getNavigationBadgeColor(): ?string
@@ -566,7 +486,7 @@ class PaymentResource extends Resource
         return [
             'ນັກຮຽນ' => $record->student?->getFullName(),
             'ວັນທີ' => $record->payment_date->format('d/m/Y'),
-            'ຈຳນວນ' => number_format($record->total_amount) . ' ກີບ',
+            'ຈຳນວນ' => $record->getFormattedTotal(),
         ];
     }
 }
