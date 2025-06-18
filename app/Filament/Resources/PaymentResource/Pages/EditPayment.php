@@ -5,7 +5,6 @@ namespace App\Filament\Resources\PaymentResource\Pages;
 use App\Filament\Resources\PaymentResource;
 use App\Models\Discount;
 use App\Models\Payment;
-use App\Models\PaymentImage;
 use App\Models\Student;
 use App\Models\AcademicYear;
 use App\Utils\Money;
@@ -26,7 +25,6 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 use Illuminate\Support\Facades\Log;
 use Filament\Support\RawJs;
-use Illuminate\Support\Facades\Storage;
 
 class EditPayment extends EditRecord
 {
@@ -72,8 +70,8 @@ class EditPayment extends EditRecord
             // ໂຫຼດຂໍ້ມູນເດືອນທີ່ຈ່າຍແລ້ວ
             $piadTuitionM = $this->record->getTuitionMonthsSafe();
             $piadFoodM = $this->record->getFoodMonthsSafe();
-            $tuitionM = $this->record->getPaidTuitionMonthsByStudent($sid, $yid);
-            $foodM = $this->record->getPaidFoodMonthsByStudent($sid, $yid);
+            $tuitionM = $this->record->getPaidTuitionMonths($sid, $yid);
+            $foodM = $this->record->getPaidFoodMonths($sid, $yid);
             $this->paidTuitionMonths = array_diff($tuitionM, $piadTuitionM);
             $this->paidFoodMonths = array_diff($foodM, $piadFoodM);
 
@@ -88,6 +86,7 @@ class EditPayment extends EditRecord
                 'food_money' => Money::toInt($this->record->food_money),
                 'tuition_months' => $tuitionM,
                 'food_months' => $foodM,
+                'image_path' => $this->record->image_path,
                 'discount_id' => $this->record->discount_id,
                 'discount_amount' => Money::toInt($this->record->discount_amount),
                 'discount_amount_view' => Money::toInt($this->record->discount_amount ?? 0),

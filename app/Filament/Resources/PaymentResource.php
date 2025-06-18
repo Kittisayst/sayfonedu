@@ -267,7 +267,7 @@ class PaymentResource extends Resource
                     ->height(40)
                     ->width(40)
                     ->circular()
-                    ->defaultImageUrl(url('/images/no-image.png'))
+                    ->defaultImageUrl(url('/images/no-payment-image.png'))
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('tuition_months_display')
@@ -534,15 +534,20 @@ class PaymentResource extends Resource
                     ->schema([
                         ImageEntry::make('image_path')
                             ->label('ຮູບພາບການຊຳລະ')
-                            ->disk('public')
-                            ->height(400)
+                            ->disk('public')  // ✅ ຕ້ອງມີ
+                            ->visibility('public')  // ✅ ຕ້ອງມີ
+                            ->height(500)
                             ->width(300)
+                            ->square(false)  // ຖ້າບໍ່ຢາກໃຫ້ເປັນສີ່ຫຼ່ຽມ
                             ->extraImgAttributes([
-                                'class' => 'rounded-lg shadow-md object-cover border',
-                                'loading' => 'lazy'
+                                'class' => 'object-cover rounded-lg shadow-md cursor-pointer',
+                                'alt' => 'Payment Receipt Image',
+                                'loading' => 'lazy',
                             ])
-                            ->defaultImageUrl(url('/images/no-payment-image.png'))
-                            ->hidden(fn(Payment $record): bool => empty($record->image_path)),
+                            ->defaultImageUrl(asset('images/no-payment-image.png'))  // ຮູບເມື່ອບໍ່ມີ
+                            ->url(fn($state) => $state ? asset('storage/' . $state) : null)  // URL สำหรับคลิก
+                            ->openUrlInNewTab()
+                            ->columnSpanFull(),
                     ])
                     ->columns(1)
                     ->collapsible()
