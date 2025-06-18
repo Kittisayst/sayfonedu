@@ -27,6 +27,7 @@ class Payment extends Model
         'food_money',
         'tuition_months',
         'food_months',
+        'image_path',
         'discount_id',
         'discount_amount',
         'late_fee',
@@ -76,70 +77,6 @@ class Payment extends Model
     {
         return $this->belongsTo(User::class, 'received_by');
     }
-
-    public function images(): HasMany
-    {
-        return $this->hasMany(PaymentImage::class, 'payment_id', 'payment_id');
-    }
-
-    /**
-     * ✅ ດຶງ URL ຮູບທີ່ 1
-     */
-    public function getImageUrlAttribute(): ?string
-    {
-        $firstImage = $this->images()->first();
-        return $firstImage ? Storage::disk('public')->url($firstImage->image_path) : null;
-    }
-
-    /**
-     * ✅ ດຶງ URLs ຮູບທັງໝົດ
-     */
-    public function getImageUrlsAttribute(): array
-    {
-        return $this->images->map(function ($image) {
-            return Storage::disk('public')->url($image->image_path);
-        })->toArray();
-    }
-
-    /**
-     * ✅ ເພີ່ມ helper methods ໃໝ່
-     */
-    public function hasImages(): bool
-    {
-        return $this->images()->exists();
-    }
-
-    public function getImagesCount(): int
-    {
-        return $this->images()->count();
-    }
-
-    public function getFirstImageUrl(): ?string
-    {
-        return $this->image_url;
-    }
-
-    public function addImage(string $imagePath, string $type = 'receipt'): \App\Models\PaymentImage
-    {
-        return $this->images()->create([
-            'image_path' => $imagePath,
-            'image_type' => $type,
-            'file_size' => Storage::disk('public')->size($imagePath),
-            'mime_type' => Storage::disk('public')->mimeType($imagePath),
-            'upload_date' => now()
-        ]);
-    }
-
-    public function clearImages(): void
-    {
-        foreach ($this->images as $image) {
-            if (Storage::disk('public')->exists($image->image_path)) {
-                Storage::disk('public')->delete($image->image_path);
-            }
-        }
-        $this->images()->delete();
-    }
-
     /**
      * ✅ ແກ້ໄຂ getMonthOptions ໃຫ້ຖືກຕ້ອງ
      */

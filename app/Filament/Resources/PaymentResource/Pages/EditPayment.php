@@ -96,8 +96,6 @@ class EditPayment extends EditRecord
                 'total_amount_view' => Money::toInt($this->record->total_amount ?? 0),
                 'note' => $this->record->note,
                 'payment_status' => $this->record->payment_status,
-                // ສຳລັບຮູບພາບ
-                'image_path' => $this->record->images->pluck('image_path')->toArray(),
             ]);
 
             // dd();

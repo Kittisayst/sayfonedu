@@ -4,7 +4,6 @@ namespace App\Filament\Resources\PaymentResource\Pages;
 
 use App\Filament\Resources\PaymentResource;
 use App\Models\Payment;
-use App\Models\PaymentImage;
 use App\Models\Student;
 use App\Models\Discount;
 use App\Models\AcademicYear;
@@ -23,6 +22,7 @@ use Filament\Forms\Form;
 use Filament\Tables\Actions\ViewAction;
 use Filament\Tables\Columns\BadgeColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Table;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Concerns\InteractsWithTable;
@@ -93,7 +93,7 @@ class PaymentPage extends Page implements HasForms, HasTable
             'total_amount' => 0,
             'total_amount_view' => '0',
             'note' => null,
-            'image_path' => []
+            'image_path' => null // ✅ ປ່ຽນເປັນ single field
         ]);
     }
 
@@ -273,23 +273,26 @@ class PaymentPage extends Page implements HasForms, HasTable
                                     ->default(now())
                                     ->maxDate(now()->addDay()),
 
+                                // ✅ ປ່ຽນເປັນຮູບດຽວ
                                 FileUpload::make('image_path')
                                     ->label("ຮູບໃບໂອນ/ໃບບິນ")
-                                    ->disk('public') // ໃຊ້ public disk
-                                    ->directory('payment_receipts') // ໂຟນເດີໃສ່ໄຟລ์
-                                    ->visibility('public') // ຕັ້ງໃຫ້ເປັນ public
+                                    ->disk('public')
+                                    ->directory('payment_receipts')
+                                    ->visibility('public')
                                     ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/jpg', 'image/webp'])
                                     ->maxSize(5120) // 5MB
                                     ->imagePreviewHeight('150')
-                                    ->multiple(true) // ອະນຸຍາດຫຼາຍຮູບ
-                                    ->maxFiles(3)
-                                    ->reorderable(true) // ສາມາດຈັດລຳດັບໄດ້
-                                    ->previewable(true) // ສາມາດເບິ່ງຕົວຢ່າງໄດ້
-                                    ->downloadable(true) // ສາມາດດາວໂຫລດໄດ້
-                                    ->helperText('ອັບໂຫຼດໄດ້ສູງສຸດ 3 ຮູບ, ແຕ່ລະຮູບບໍ່ເກີນ 5MB (PNG, JPG, JPEG, WEBP)')
+                                    ->image()
+                                    ->imageEditorAspectRatios([
+                                        '16:9',
+                                        '4:3',
+                                        '1:1',
+                                    ])
+                                    ->previewable(true)
+                                    ->downloadable(true)
+                                    ->helperText('ອັບໂຫຼດໄດ້ 1 ຮູບ, ບໍ່ເກີນ 5MB (PNG, JPG, JPEG, WEBP)')
                                     ->columnSpanFull()
                                     ->deleteUploadedFileUsing(function ($file) {
-                                        // ລົບໄຟລ์ອອກຈາກ storage
                                         if (Storage::disk('public')->exists($file)) {
                                             Storage::disk('public')->delete($file);
                                             return true;
@@ -297,9 +300,8 @@ class PaymentPage extends Page implements HasForms, HasTable
                                         return false;
                                     })
                                     ->getUploadedFileNameForStorageUsing(function ($file) {
-                                        // ສ້າງຊື່ໄຟລ์ໃໝ່ທີ່ບໍ່ຊ້ອນກັນ
                                         $extension = $file->getClientOriginalExtension();
-                                        $fileName = time() . '_' . uniqid() . '.' . $extension;
+                                        $fileName = 'payment_' . time() . '_' . uniqid() . '.' . $extension;
                                         return $fileName;
                                     })
                             ])
@@ -393,6 +395,15 @@ class PaymentPage extends Page implements HasForms, HasTable
                         'refunded' => 'ຄືນເງິນ',
                         default => $state,
                     }),
+
+                // ✅ ເພີ່ມ column ສະແດງຮູບ
+                ImageColumn::make('image_path')
+                    ->label('ຮູບບິນ')
+                    ->disk('public')
+                    ->height(40)
+                    ->width(40)
+                    ->circular()
+                    ->defaultImageUrl(url('/images/no-image.png')),
 
                 TextColumn::make('tuition_months')
                     ->label('ເດືອນຄ່າຮຽນ')
@@ -628,7 +639,6 @@ class PaymentPage extends Page implements HasForms, HasTable
             $this->loadPaymentHistory();
             $this->resetSearchInterface();
             $this->notifyStudentSelected();
-
         }
     }
 
@@ -763,8 +773,8 @@ class PaymentPage extends Page implements HasForms, HasTable
             "cash" => $this->parseAmount($data['cash'] ?? 0),
             "transfer" => $this->parseAmount($data['transfer'] ?? 0),
             "food_money" => $this->parseAmount($data['food_money'] ?? 0),
-            "tuition_months" => $data['tuition_months'] ?? [],      // ✅ ລຶບ json_encode
-            "food_months" => $data['food_months'] ?? [],            // ✅ ລຶບ json_encode
+            "tuition_months" => $data['tuition_months'] ?? [],
+            "food_months" => $data['food_months'] ?? [],
             "discount_id" => $data['discount_id'] ?? null,
             "discount_amount" => $this->parseAmount($data['discount_amount'] ?? 0),
             "total_amount" => $this->parseAmount($data['total_amount'] ?? 0),
@@ -772,12 +782,12 @@ class PaymentPage extends Page implements HasForms, HasTable
             "note" => $data['note'] ?? null,
             'received_by' => auth()->id(),
             "payment_status" => "pending",
-            "image_paths" => $data['image_path'] ?? [],
+            "image_path" => $data['image_path'] ?? null, // ✅ ປ່ຽນເປັນ single field
         ];
     }
 
     /**
-     * ✅ ປັບປຸງ Confirm and save payment
+     * ✅ ປັບປຸງ Confirm and save payment - ບໍ່ໃຊ້ PaymentImage
      */
     public function confirmPayment(): void
     {
@@ -787,7 +797,7 @@ class PaymentPage extends Page implements HasForms, HasTable
             // ກວດສອບຂໍ້ມູນອີກຄັ້ງກ່ອນບັນທຶກ
             $this->validateBeforeSave();
 
-            // Create payment record
+            // Create payment record ດ້ວຍ image_path
             $payment = Payment::create([
                 "student_id" => $this->pendingPaymentData['student_id'],
                 "academic_year_id" => $this->pendingPaymentData['academic_year_id'],
@@ -804,11 +814,9 @@ class PaymentPage extends Page implements HasForms, HasTable
                 "late_fee" => $this->pendingPaymentData['late_fee'],
                 "note" => $this->pendingPaymentData['note'],
                 "received_by" => $this->pendingPaymentData['received_by'],
-                "payment_status" => "pending", // ຕັ້ງເປັນ confirmed ທັນທີ
+                "payment_status" => "pending",
+                "image_path" => $this->pendingPaymentData['image_path'], // ✅ ບັນທຶກຮູບໃນ payments
             ]);
-
-            // ✅ ປັບປຸງການບັນທຶກຮູບພາບ
-            $this->savePaymentImages($payment);
 
             DB::commit();
 
@@ -845,157 +853,6 @@ class PaymentPage extends Page implements HasForms, HasTable
     }
 
     /**
-     * ✅ ບັນທຶກຮູບພາບການຊຳລະເງິນ (ໃຊ້ PaymentImage model)
-     */
-    private function savePaymentImages(Payment $payment): void
-    {
-        try {
-            // ✅ ດຶງຮູບພາບຈາກ form data ຫຼື pending data
-            $imagePaths = $this->pendingPaymentData['image_paths'] ??
-                $this->form->getState()['image_path'] ?? [];
-
-            if (empty($imagePaths)) {
-                Log::info('No images to save', ['payment_id' => $payment->payment_id]);
-                return;
-            }
-
-            $results = ['success' => 0, 'failed' => 0, 'errors' => []];
-
-            foreach ($imagePaths as $index => $imagePath) {
-                try {
-                    // ✅ ໃຊ້ validation ຈາກ model
-                    if (!$this->validateSingleImage($imagePath, $index + 1, $results)) {
-                        continue;
-                    }
-
-                    // ✅ ສ້າງ PaymentImage ດ້ວຍ model
-                    $paymentImage = PaymentImage::create([
-                        'payment_id' => $payment->payment_id,
-                        'image_path' => $imagePath,
-                        'image_type' => $this->determineImageType($imagePath),
-                        'upload_date' => now(),
-                    ]);
-
-                    $results['success']++;
-
-                    Log::info('Image saved', [
-                        'payment_id' => $payment->payment_id,
-                        'image_id' => $paymentImage->image_id,
-                        'type' => $paymentImage->image_type
-                    ]);
-
-                } catch (\Exception $e) {
-                    $results['failed']++;
-                    $results['errors'][] = "ຮູບທີ່ " . ($index + 1) . ": " . $e->getMessage();
-                    Log::error('Failed to save image', ['error' => $e->getMessage()]);
-                }
-            }
-
-            // ✅ ສົ່ງ notification ຕາມຜົນ
-            $this->notifyImageResults($results);
-
-        } catch (\Exception $e) {
-            Log::error('Critical error in savePaymentImages: ' . $e->getMessage());
-
-            Notification::make()
-                ->title('ບັນຫາການບັນທຶກຮູບພາບ')
-                ->body('ກະລຸນາລອງໃໝ່ ຫຼື ຕິດຕໍ່ຜູ້ດູແລ')
-                ->danger()
-                ->send();
-        }
-    }
-
-    /**
-     * ✅ ກວດສອບຮູບພາບແຕ່ລະຮູບ
-     */
-    private function validateSingleImage(string $imagePath, int $imageNumber, array &$results): bool
-    {
-        if (empty($imagePath)) {
-            $results['failed']++;
-            $results['errors'][] = "ຮູບທີ່ {$imageNumber}: ບໍ່ມີຂໍ້ມູນ";
-            return false;
-        }
-
-        if (!Storage::disk('public')->exists($imagePath)) {
-            $results['failed']++;
-            $results['errors'][] = "ຮູບທີ່ {$imageNumber}: ບໍ່ພົບໄຟລ໌";
-            return false;
-        }
-
-        // ✅ ກວດສອບຂະໜາດ (5MB)
-        $fileSize = Storage::disk('public')->size($imagePath);
-        if ($fileSize > 5242880) {
-            $results['failed']++;
-            $results['errors'][] = "ຮູບທີ່ {$imageNumber}: ໄຟລ໌ໃຫຍ່ເກີນ 5MB";
-            return false;
-        }
-
-        // ✅ ກວດສອບປະເພດໄຟລ໌
-        $mimeType = Storage::disk('public')->mimeType($imagePath);
-        $allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
-
-        if (!in_array($mimeType, $allowedTypes)) {
-            $results['failed']++;
-            $results['errors'][] = "ຮູບທີ່ {$imageNumber}: ປະເພດໄຟລ໌ບໍ່ຖືກຕ້ອງ";
-            return false;
-        }
-
-        return true;
-    }
-
-    /**
-     * ✅ ກຳນົດປະເພດຮູບພາບ (ໃຊ້ຮ່ວມກັບ PaymentImage model)
-     */
-    private function determineImageType(string $imagePath): string
-    {
-        $fileName = strtolower(basename($imagePath));
-
-        if (str_contains($fileName, 'transfer') || str_contains($fileName, 'ໂອນ')) {
-            return 'transfer_slip';
-        }
-
-        if (str_contains($fileName, 'receipt') || str_contains($fileName, 'ບິນ')) {
-            return 'receipt';
-        }
-
-        return 'receipt'; // default
-    }
-
-    /**
-     * ✅ ສົ່ງ notification ຕາມຜົນ
-     */
-    private function notifyImageResults(array $results): void
-    {
-        $total = $results['success'] + $results['failed'];
-
-        if ($results['failed'] === 0 && $results['success'] > 0) {
-            Notification::make()
-                ->title('ບັນທຶກຮູບພາບສຳເລັດ')
-                ->body("ບັນທຶກຮູບພາບທັງໝົດ {$results['success']} ຮູບສຳເລັດ")
-                ->success()
-                ->send();
-
-        } elseif ($results['success'] > 0 && $results['failed'] > 0) {
-            $errorMsg = implode(', ', array_slice($results['errors'], 0, 2));
-
-            Notification::make()
-                ->title('ບັນທຶກບາງສ່ວນ')
-                ->body("ສຳເລັດ: {$results['success']}, ລົ້ມແຫຼວ: {$results['failed']}. {$errorMsg}")
-                ->warning()
-                ->send();
-
-        } elseif ($results['failed'] > 0) {
-            $errorMsg = implode(', ', array_slice($results['errors'], 0, 2));
-
-            Notification::make()
-                ->title('ບັນທຶກຮູບພາບລົ້ມແຫຼວ')
-                ->body($errorMsg)
-                ->danger()
-                ->send();
-        }
-    }
-
-    /**
      * ✅ ເພີ່ມການກວດສອບກ່ອນບັນທຶກ
      */
     private function validateBeforeSave(): void
@@ -1015,7 +872,7 @@ class PaymentPage extends Page implements HasForms, HasTable
             throw new \Exception('ເລກໃບບິນນີ້ມີແລ້ວ ກະລຸນາສ້າງໃໝ່');
         }
 
-        // ✅ ກວດສອບເດືອນຊ້ຳອີກຄັ້ງ - ແກ້ໄຂ
+        // ✅ ກວດສອບເດືອນຊ້ຳອີກຄັ້ງ
         $tuitionMonths = $this->pendingPaymentData['tuition_months'] ?? [];
         if (!empty($tuitionMonths)) {
             $paidTuitionMonths = Payment::getPaidTuitionMonths(
@@ -1024,7 +881,6 @@ class PaymentPage extends Page implements HasForms, HasTable
             );
             $duplicateTuition = array_intersect($tuitionMonths, $paidTuitionMonths);
             if (!empty($duplicateTuition)) {
-                // ✅ ແປງເປັນຊື່ເດືອນ
                 $monthNames = array_map(fn($month) => Payment::getMonthName($month), $duplicateTuition);
                 throw new \Exception('ເດືອນຄ່າຮຽນ ' . implode(', ', $monthNames) . ' ໄດ້ຈ່າຍແລ້ວ');
             }
@@ -1038,7 +894,6 @@ class PaymentPage extends Page implements HasForms, HasTable
             );
             $duplicateFood = array_intersect($foodMonths, $paidFoodMonths);
             if (!empty($duplicateFood)) {
-                // ✅ ແປງເປັນຊື່ເດືອນ
                 $monthNames = array_map(fn($month) => Payment::getMonthName($month), $duplicateFood);
                 throw new \Exception('ເດືອນຄ່າອາຫານ ' . implode(', ', $monthNames) . ' ໄດ້ຈ່າຍແລ້ວ');
             }
@@ -1082,7 +937,7 @@ class PaymentPage extends Page implements HasForms, HasTable
             'total_amount' => 0,
             'total_amount_view' => '0',
             'note' => null,
-            'image_path' => []
+            'image_path' => null // ✅ ປ່ຽນເປັນ null
         ]);
     }
 
@@ -1095,8 +950,8 @@ class PaymentPage extends Page implements HasForms, HasTable
         $this->profile_image = null;
         $this->search_val = '';
         $this->foundStudents = collect();
-        $this->paidTuitionMonths = []; // ✅ ເພີ່ມ
-        $this->paidFoodMonths = [];    // ✅ ເພີ່ມ
+        $this->paidTuitionMonths = [];
+        $this->paidFoodMonths = [];
         $this->resetForm();
 
         Notification::make()
@@ -1136,9 +991,6 @@ class PaymentPage extends Page implements HasForms, HasTable
         ];
     }
 
-    /**
-     * ✅ ເພີ່ມ method ສຳລັບການຄົ້ນຫາປະຫວັດການຊຳລະ
-     */
     /**
      * ✅ ດຶງປະຫວັດການຊຳລະເດືອນຂອງນັກຮຽນ
      */
@@ -1222,5 +1074,4 @@ class PaymentPage extends Page implements HasForms, HasTable
 
         return $health;
     }
-
 }
