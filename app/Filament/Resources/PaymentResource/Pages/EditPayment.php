@@ -3,9 +3,12 @@
 namespace App\Filament\Resources\PaymentResource\Pages;
 
 use App\Filament\Resources\PaymentResource;
+use App\Models\Discount;
 use App\Models\Payment;
+use App\Models\PaymentImage;
 use App\Models\Student;
 use App\Models\AcademicYear;
+use App\Utils\Money;
 use Filament\Actions;
 use Filament\Forms\Form;
 use Filament\Forms\Components\CheckboxList;
@@ -21,8 +24,6 @@ use Filament\Forms\Get;
 use Filament\Forms\Set;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Filament\Support\RawJs;
 use Illuminate\Support\Facades\Storage;
@@ -61,33 +62,45 @@ class EditPayment extends EditRecord
         $this->selectedStudent = $this->record->student;
         $this->currentAcademicYear = $this->record->academicYear ?? AcademicYear::where('is_current', true)->first();
 
-        // ໂຫຼດຂໍ້ມູນເດືອນທີ່ຈ່າຍແລ້ວ
-        $this->loadPaidMonths();
+
 
         // ✅ ຕື່ມຂໍ້ມູນໃສ່ form ໃຫ້ຄົບຖ້ວນ
         try {
+            $sid = $this->record->student_id;
+            $yid = $this->record->academic_year_id;
+
+            // ໂຫຼດຂໍ້ມູນເດືອນທີ່ຈ່າຍແລ້ວ
+            $piadTuitionM = $this->record->getTuitionMonthsSafe();
+            $piadFoodM = $this->record->getFoodMonthsSafe();
+            $tuitionM = $this->record->getPaidTuitionMonthsByStudent($sid, $yid);
+            $foodM = $this->record->getPaidFoodMonthsByStudent($sid, $yid);
+            $this->paidTuitionMonths = array_diff($tuitionM, $piadTuitionM);
+            $this->paidFoodMonths = array_diff($foodM, $piadFoodM);
+
             $this->form->fill([
                 'student_id' => $this->record->student_id,
                 'academic_year_id' => $this->record->academic_year_id,
                 'receipt_number' => $this->record->receipt_number,
                 'receipt_number_view' => $this->record->receipt_number,
                 'payment_date' => $this->record->payment_date,
-                'cash' => $this->record->cash,
-                'transfer' => $this->record->transfer,
-                'food_money' => $this->record->food_money,
-                'tuition_months' => $this->record->getTuitionMonthsSafe(),
-                'food_months' => $this->record->getFoodMonthsSafe(),
+                'cash' => Money::toInt($this->record->cash),
+                'transfer' => Money::toInt($this->record->transfer),
+                'food_money' => Money::toInt($this->record->food_money),
+                'tuition_months' => $tuitionM,
+                'food_months' => $foodM,
                 'discount_id' => $this->record->discount_id,
-                'discount_amount' => $this->record->discount_amount,
-                'discount_amount_view' => number_format($this->record->discount_amount ?? 0),
-                'late_fee' => $this->record->late_fee,
-                'total_amount' => $this->record->total_amount,
-                'total_amount_view' => number_format($this->record->total_amount ?? 0),
+                'discount_amount' => Money::toInt($this->record->discount_amount),
+                'discount_amount_view' => Money::toInt($this->record->discount_amount ?? 0),
+                'late_fee' => Money::toInt($this->record->late_fee),
+                'total_amount' => Money::toInt($this->record->total_amount),
+                'total_amount_view' => Money::toInt($this->record->total_amount ?? 0),
                 'note' => $this->record->note,
                 'payment_status' => $this->record->payment_status,
                 // ສຳລັບຮູບພາບ
                 'image_path' => $this->record->images->pluck('image_path')->toArray(),
             ]);
+
+            // dd();
         } catch (\Exception $e) {
             Log::error('Error filling form in EditPayment mount: ' . $e->getMessage());
 
@@ -95,32 +108,6 @@ class EditPayment extends EditRecord
                 ->title('ເກີດຂໍ້ຜິດພາດ')
                 ->body('ບໍ່ສາມາດໂຫຼດຂໍ້ມູນການຊຳລະເງິນໄດ້')
                 ->danger()
-                ->send();
-        }
-    }
-    /**
-     * ✅ ໂຫຼດຂໍ້ມູນເດືອນທີ່ຈ່າຍແລ້ວ
-     */
-    /**
-     * ✅ ແກ້ໄຂ method loadPaidMonths() 
-     * ປັບປຸງການຈັດການ array/string ໃຫ້ຖືກຕ້ອງ
-     */
-    private function loadPaidMonths(): void
-    {
-        try {
-            // ✅ ໃຊ້ helper methods ທີ່ປອດໄພຈາກ Model
-            $this->paidTuitionMonths = $this->record->getTuitionMonthsSafe();
-            $this->paidFoodMonths = $this->record->getFoodMonthsSafe();
-
-        } catch (\Exception $e) {
-            Log::error('Error loading paid months in EditPayment: ' . $e->getMessage());
-            $this->paidTuitionMonths = [];
-            $this->paidFoodMonths = [];
-
-            Notification::make()
-                ->title('ເກີດຂໍ້ຜິດພາດ')
-                ->body('ບໍ່ສາມາດໂຫຼດຂໍ້ມູນເດືອນທີ່ຈ່າຍແລ້ວໄດ້')
-                ->warning()
                 ->send();
         }
     }
@@ -139,18 +126,12 @@ class EditPayment extends EditRecord
         return in_array($month, $paidMonths);
     }
 
-    private function getAvailableFoodMonths(): array
-    {
-        return Payment::getMonthOptions();
-
-    }
-
     /**
      * ✅ ສ້າງລາຍການທາງເລືອກສ່ວນຫຼຸດ
      */
     private function getDiscountOptions(): array
     {
-        return \App\Models\Discount::where('is_active', true)
+        return Discount::where('is_active', true)
             ->pluck('discount_name', 'discount_id')
             ->toArray();
     }
@@ -170,7 +151,7 @@ class EditPayment extends EditRecord
                             ->schema([
                                 CheckboxList::make('tuition_months')
                                     ->hiddenLabel()
-                                    ->options(fn() => $this->getAvailableTuitionMonths())
+                                    ->options(fn() => Payment::getMonthOptions())
                                     ->disableOptionWhen(fn(string $value): bool => $this->isMonthPaid($value, 'tuition'))
                                     ->columns(3)
                                     ->columnSpanFull()
@@ -183,7 +164,7 @@ class EditPayment extends EditRecord
                             ->schema([
                                 CheckboxList::make('food_months')
                                     ->hiddenLabel()
-                                    ->options(fn() => $this->getAvailableFoodMonths())
+                                    ->options(fn() => Payment::getMonthOptions())
                                     ->disableOptionWhen(fn(string $value): bool => $this->isMonthPaid($value, 'food'))
                                     ->columns(3)
                                     ->columnSpanFull()
@@ -266,35 +247,21 @@ class EditPayment extends EditRecord
                                     ->default(now())
                                     ->maxDate(now()->addDay()),
 
-                                FileUpload::make('image_path')
+                                FileUpload::make('image_path') // ✅ ປ່ຽນຈາກ 'image_path' ເປັນ 'payment_images'
                                     ->label("ຮູບໃບໂອນ/ໃບບິນ")
-                                    ->disk('public') // ໃຊ້ public disk
-                                    ->directory('payment_receipts') // ໂຟນເດີໃສ່ໄຟລ์
-                                    ->visibility('public') // ຕັ້ງໃຫ້ເປັນ public
+                                    ->disk('public')
+                                    ->directory('payment_receipts')
+                                    ->visibility('public')
                                     ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/jpg', 'image/webp'])
                                     ->maxSize(5120) // 5MB
                                     ->imagePreviewHeight('150')
-                                    ->multiple(true) // ອະນຸຍາດຫຼາຍຮູບ
+                                    ->multiple(true) // ✅ ໃຊ້ໄດ້ແລ້ວ
                                     ->maxFiles(3)
-                                    ->reorderable(true) // ສາມາດຈັດລຳດັບໄດ້
-                                    ->previewable(true) // ສາມາດເບິ່ງຕົວຢ່າງໄດ້
-                                    ->downloadable(true) // ສາມາດດາວໂຫລດໄດ້
-                                    ->helperText('ອັບໂຫຼດໄດ້ສູງສຸດ 3 ຮູບ, ແຕ່ລະຮູບບໍ່ເກີນ 5MB (PNG, JPG, JPEG, WEBP)')
+                                    ->reorderable(true)
+                                    ->previewable(true)
+                                    ->downloadable(true)
+                                    ->helperText('ອັບໂຫຼດໄດ້ສູງສຸດ 3 ຮູບ, ແຕ່ລະຮູບບໍ່ເກີນ 5MB')
                                     ->columnSpanFull()
-                                    ->deleteUploadedFileUsing(function ($file) {
-                                        // ລົບໄຟລ์ອອກຈາກ storage
-                                        if (Storage::disk('public')->exists($file)) {
-                                            Storage::disk('public')->delete($file);
-                                            return true;
-                                        }
-                                        return false;
-                                    })
-                                    ->getUploadedFileNameForStorageUsing(function ($file) {
-                                        // ສ້າງຊື່ໄຟລ໌ໃໝ່ທີ່ບໍ່ຊ້ອນກັນ
-                                        $extension = $file->getClientOriginalExtension();
-                                        $fileName = time() . '_' . uniqid() . '.' . $extension;
-                                        return $fileName;
-                                    })
                             ])
                             ->columns(1)
                             ->columnSpan(1),
@@ -379,10 +346,10 @@ class EditPayment extends EditRecord
     {
         try {
             // ດຶງຄ່າຈາກ form
-            $cash = $this->parseAmount($get('cash'));
-            $transfer = $this->parseAmount($get('transfer'));
-            $foodMoney = $this->parseAmount($get('food_money'));
-            $lateFee = $this->parseAmount($get('late_fee'));
+            $cash = Money::toInt($get('cash'));
+            $transfer = Money::toInt($get('transfer'));
+            $foodMoney = Money::toInt($get('food_money'));
+            $lateFee = Money::toInt($get('late_fee'));
             $discountId = $get('discount_id');
 
             // ຄິດໄລ່ຈຳນວນກ່ອນສ່ວນຫຼຸດ
@@ -408,6 +375,43 @@ class EditPayment extends EditRecord
             $set('discount_amount_view', '0');
             $set('total_amount', 0);
             $set('total_amount_view', '0');
+        }
+    }
+
+    private function calculateDiscountAmount($discountId, float $amount): float
+    {
+        if (!$discountId || $amount <= 0) {
+            return 0;
+        }
+
+        try {
+            $discount = Discount::find($discountId);
+            if (!$discount || !$discount->is_active) {
+                return 0;
+            }
+
+            // ກວດສອບເງື່ອນໄຂຂັ້ນຕ່ຳ
+            if ($amount < ($discount->min_amount ?? 0)) {
+                return 0;
+            }
+
+            if ($discount->discount_type === 'percentage') {
+                $discountAmount = ($amount * $discount->discount_value) / 100;
+
+                // ກວດສອບຈຳນວນສູງສຸດ
+                if ($discount->max_amount && $discountAmount > $discount->max_amount) {
+                    $discountAmount = $discount->max_amount;
+                }
+
+                return $discountAmount;
+            } elseif ($discount->discount_type === 'fixed') {
+                return min($discount->discount_value, $amount);
+            }
+
+            return 0;
+        } catch (\Exception $e) {
+            Log::error('Error calculating discount: ' . $e->getMessage());
+            return 0;
         }
     }
 

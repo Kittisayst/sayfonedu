@@ -82,9 +82,62 @@ class Payment extends Model
         return $this->hasMany(PaymentImage::class, 'payment_id', 'payment_id');
     }
 
-    public function getImageUrlAttribute(): string
+    /**
+     * ✅ ດຶງ URL ຮູບທີ່ 1
+     */
+    public function getImageUrlAttribute(): ?string
     {
-        return Storage::disk('public')->url($this->image_path);
+        $firstImage = $this->images()->first();
+        return $firstImage ? Storage::disk('public')->url($firstImage->image_path) : null;
+    }
+
+    /**
+     * ✅ ດຶງ URLs ຮູບທັງໝົດ
+     */
+    public function getImageUrlsAttribute(): array
+    {
+        return $this->images->map(function ($image) {
+            return Storage::disk('public')->url($image->image_path);
+        })->toArray();
+    }
+
+    /**
+     * ✅ ເພີ່ມ helper methods ໃໝ່
+     */
+    public function hasImages(): bool
+    {
+        return $this->images()->exists();
+    }
+
+    public function getImagesCount(): int
+    {
+        return $this->images()->count();
+    }
+
+    public function getFirstImageUrl(): ?string
+    {
+        return $this->image_url;
+    }
+
+    public function addImage(string $imagePath, string $type = 'receipt'): \App\Models\PaymentImage
+    {
+        return $this->images()->create([
+            'image_path' => $imagePath,
+            'image_type' => $type,
+            'file_size' => Storage::disk('public')->size($imagePath),
+            'mime_type' => Storage::disk('public')->mimeType($imagePath),
+            'upload_date' => now()
+        ]);
+    }
+
+    public function clearImages(): void
+    {
+        foreach ($this->images as $image) {
+            if (Storage::disk('public')->exists($image->image_path)) {
+                Storage::disk('public')->delete($image->image_path);
+            }
+        }
+        $this->images()->delete();
     }
 
     /**
@@ -353,6 +406,49 @@ class Payment extends Model
             Log::error('Error getting tuition months: ' . $e->getMessage());
             return [];
         }
+    }
+
+    /**
+     * ດຶງລາຍການເດືອນຄ່າຮຽນທີ່ຈ່າຍແລ້ວທັງໝົດຂອງນັກຮຽນ
+     */
+    public function getPaidTuitionMonthsByStudent(int $studentId, int $academicYearId = null): array
+    {
+        return $this->getPaidMonthsByStudent($studentId, $academicYearId, 'tuition');
+    }
+
+    /**
+     * ດຶງລາຍການເດືອນຄ່າອາຫານທີ່ຈ່າຍແລ້ວທັງໝົດຂອງນັກຮຽນ
+     */
+    public function getPaidFoodMonthsByStudent(int $studentId, int $academicYearId = null): array
+    {
+        return $this->getPaidMonthsByStudent($studentId, $academicYearId, 'food');
+    }
+
+    /**
+     * Helper method ສຳລັບດຶງເດືອນທີ່ຈ່າຍແລ້ວ
+     */
+    private function getPaidMonthsByStudent(int $studentId, int $academicYearId, string $type): array
+    {
+        $query = static::byStudent($studentId)->confirmed();
+
+        if ($academicYearId) {
+            $query->byAcademicYear($academicYearId);
+        }
+
+        $payments = $query->get();
+        $totalMonths = [];
+
+        foreach ($payments as $payment) {
+            $months = $type === 'tuition'
+                ? $payment->getTuitionMonthsSafe()
+                : $payment->getFoodMonthsSafe();
+
+            if (!empty($months)) {
+                $totalMonths = array_merge($totalMonths, $months);
+            }
+        }
+
+        return array_values(array_unique($totalMonths));
     }
 
     public function getFoodMonthsSafe(): array
