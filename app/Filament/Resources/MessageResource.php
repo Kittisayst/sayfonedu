@@ -34,6 +34,7 @@ class MessageResource extends Resource
     protected static ?string $navigationIcon = 'heroicon-o-envelope';
     protected static ?string $recordTitleAttribute = 'subject';
     protected static ?string $navigationGroup = 'ການສື່ສານ';
+    protected static ?int $navigationSort = 6;
     protected static ?string $pluralModelLabel = 'ຂໍ້ຄວາມ';
     protected static ?string $modelLabel = 'ຂໍ້ຄວາມ';
 

@@ -29,6 +29,7 @@ class NotificationResource extends Resource
     protected static ?string $navigationIcon = 'heroicon-o-bell';
     protected static ?string $recordTitleAttribute = 'title';
     protected static ?string $navigationGroup = 'ການສື່ສານ';
+    protected static ?int $navigationSort = 6;
     protected static ?string $pluralModelLabel = 'ການແຈ້ງເຕືອນ';
     protected static ?string $modelLabel = 'ການແຈ້ງເຕືອນ';
     public static function form(Form $form): Form

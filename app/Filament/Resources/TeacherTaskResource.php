@@ -24,7 +24,7 @@ class TeacherTaskResource extends Resource
     protected static ?string $navigationLabel = "ມອບໝາຍວຽກ";
     protected static ?string $navigationGroup = 'ການຈັດການຂໍ້ມູນຄູສອນ';
     protected static ?string $pluralModelLabel = 'ໜ້າວຽກທັງໝົດ';
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 4;
 
     public static function getEloquentQuery(): Builder
     {

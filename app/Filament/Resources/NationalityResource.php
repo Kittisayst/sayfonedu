@@ -21,7 +21,7 @@ class NationalityResource extends Resource
 
     protected static ?string $navigationGroup = 'ຈັດການຂໍ້ມູນພື້ນຖານ';
 
-    protected static ?int $navigationSort = 12;
+    protected static ?int $navigationSort = 8;
 
     protected static ?string $navigationLabel = 'ສັນຊາດ';
 

@@ -22,7 +22,7 @@ class ClassRoomResource extends Resource
 
     protected static ?string $navigationGroup = 'ຈັດການຊັ້ນຮຽນ ແລະ ຫ້ອງຮຽນ';
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 2;
 
     public static function getNavigationLabel(): string
     {

@@ -28,7 +28,7 @@ class RoleResource extends Resource
 
     protected static ?string $pluralModelLabel = 'ບົດບາດຜູ້ໃຊ້ງານ';
 
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = 7;
 
     protected static ?string $recordTitleAttribute = 'role_name';
 

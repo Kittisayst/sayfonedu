@@ -21,7 +21,7 @@ class StudentAchievementResource extends Resource
 
     protected static ?string $navigationGroup = 'ຈັດການຂໍ້ມູນນັກຮຽນ';
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 1;
 
     protected static ?string $navigationLabel = 'ຜົນງານນັກຮຽນ';
 

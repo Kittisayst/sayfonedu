@@ -26,8 +26,8 @@ class PaymentResource extends Resource
     protected static ?string $navigationLabel = 'ການຊຳລະເງິນ';
     protected static ?string $modelLabel = 'ການຊຳລະເງິນ';
     protected static ?string $pluralModelLabel = 'ການຊຳລະເງິນ';
-    protected static ?string $navigationGroup = 'ການເງິນ';
-    protected static ?int $navigationSort = 1;
+    protected static ?string $navigationGroup = 'ຈັດການການເງິນ';
+    protected static ?int $navigationSort = 3;
 
     /**
      * ✅ ຟອມສຳລັບສ້າງ/ແກ້ໄຂການຊຳລະ - ປັບປຸງໃຫ້ໃຊ້ image_path

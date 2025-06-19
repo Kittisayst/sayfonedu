@@ -21,7 +21,7 @@ class UserActivityResource extends Resource
 
     protected static ?string $navigationGroup = 'ຈັດການຜູ້ໃຊ້';
 
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = 7;
 
     protected static ?string $navigationLabel = 'ຕິດຕາມຜູ້ໃຊ້ງານ';
 

@@ -19,6 +19,27 @@ class SchoolLevelResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
 
+    protected static ?string $navigationGroup = 'ຈັດການຂໍ້ມູນພື້ນຖານ';
+
+    protected static ?int $navigationSort = 8;
+
+    public static function getNavigationLabel(): string
+    {
+        return 'ລະດັບການສຶກສາ';
+    }
+
+    public static function getModelLabel(): string
+    {
+        return 'ລະດັບການສຶກສາ';
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return 'ລະດັບການສຶກສາທັງໝົດ';
+    }
+
+
+
     public static function form(Form $form): Form
     {
         return $form

@@ -23,7 +23,7 @@ class TeacherDocumentResource extends Resource
 
     protected static ?string $navigationGroup = 'ການຈັດການຂໍ້ມູນຄູສອນ';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 4;
 
     protected static ?string $navigationLabel = 'ເອກະສານຄູ';
 

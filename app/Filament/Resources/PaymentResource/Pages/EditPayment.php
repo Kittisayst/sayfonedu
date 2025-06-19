@@ -9,6 +9,7 @@ use App\Models\Student;
 use App\Models\AcademicYear;
 use App\Utils\Money;
 use Filament\Actions;
+use Filament\Forms\Components\ViewField;
 use Filament\Forms\Form;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\DateTimePicker;
@@ -36,6 +37,9 @@ class EditPayment extends EditRecord
     public $currentAcademicYear = null;
 
     public ?array $data = [];
+
+    public bool $showSaveConfirmModal = false;
+    public array $pendingSaveData = [];
 
     /**
      * ✅ ແກ້ໄຂ mount() method ໃຫ້ຄົບຖ້ວນ
@@ -252,12 +256,9 @@ class EditPayment extends EditRecord
                                     ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/jpg', 'image/webp'])
                                     ->maxSize(5120) // 5MB
                                     ->imagePreviewHeight('150')
-                                    ->multiple(true) // ✅ ໃຊ້ໄດ້ແລ້ວ
-                                    ->maxFiles(3)
                                     ->reorderable(true)
                                     ->previewable(true)
                                     ->downloadable(true)
-                                    ->helperText('ອັບໂຫຼດໄດ້ສູງສຸດ 3 ຮູບ, ແຕ່ລະຮູບບໍ່ເກີນ 5MB')
                                     ->columnSpanFull()
                             ])
                             ->columns(1)
@@ -314,29 +315,6 @@ class EditPayment extends EditRecord
     }
 
     /**
-     * ✅ Helper method ສຳລັບການແປງຄ່າເງິນ
-     */
-    private function parseAmount($value): float
-    {
-        if (is_null($value) || $value === '') {
-            return 0;
-        }
-
-        // ລຶບ comma ແລະ spaces
-        $cleaned = str_replace([',', ' '], '', (string) $value);
-
-        return is_numeric($cleaned) ? (float) $cleaned : 0;
-    }
-
-    /**
-     * ✅ Helper method ສຳລັບການຈັດຮູບແບບເງິນ
-     */
-    private function formatMoney(float $amount): string
-    {
-        return number_format($amount, 0, '.', ',');
-    }
-
-    /**
      * ✅ ຄິດໄລ່ຈຳນວນເງິນລວມ (ເໝືອນກັບ PaymentPage)
      */
     private function calculateTotal(Set $set, Get $get): void
@@ -360,9 +338,9 @@ class EditPayment extends EditRecord
 
             // ອັບເດດຄ່າໃນ form
             $set('discount_amount', $discountAmount);
-            $set('discount_amount_view', $this->formatMoney($discountAmount));
+            $set('discount_amount_view', Money::toLAK($discountAmount));
             $set('total_amount', $total);
-            $set('total_amount_view', $this->formatMoney($total));
+            $set('total_amount_view', Money::toLAK($total));
 
         } catch (\Exception $e) {
             Log::error('Error in calculateTotal: ' . $e->getMessage());
@@ -469,7 +447,62 @@ class EditPayment extends EditRecord
         ];
     }
 
-    /**
+    private function preparePaymentData(array $data): void
+    {
+        $this->pendingSaveData = [
+            "student_id" => $this->selectedStudent->student_id,
+            "academic_year_id" => $this->currentAcademicYear?->academic_year_id ?? 1,
+            "payment_date" => $data['payment_date'] ?? now(),
+            "receipt_number" => $data["receipt_number"],
+            "cash" => Money::toInt($data['cash'] ?? 0),
+            "transfer" => Money::toInt($data['transfer'] ?? 0),
+            "food_money" => Money::toInt($data['food_money'] ?? 0),
+            "tuition_months" => $data['tuition_months'] ?? [],
+            "food_months" => $data['food_months'] ?? [],
+            "discount_id" => $data['discount_id'] ?? null,
+            "discount_amount" => Money::toInt($data['discount_amount'] ?? 0),
+            "total_amount" => Money::toInt($data['total_amount'] ?? 0),
+            "late_fee" => Money::toInt($data['late_fee'] ?? 0),
+            "note" => $data['note'] ?? null,
+            'received_by' => auth()->id(),
+            "payment_status" => "pending",
+        ];
+    }
+
+    protected function getFormActions(): array
+    {
+        return [
+            Actions\Action::make('cancel')
+                ->label('ຍົກເລີກ')
+                ->icon('heroicon-o-x-mark')
+                ->color('gray')
+                ->url($this->getResource()::getUrl('view', ['record' => $this->record])),
+            Actions\Action::make('edit_payment')
+                ->label('ແກ້ໄຂການຊຳລະ')
+                ->icon('heroicon-o-pencil')
+                ->modalWidth('lg')
+                ->fillForm(fn(): array => [
+                    'amount' => $this->record->amount,
+                    'payment_date' => $this->record->payment_date,
+                    'transfer' => $this->record->transfer,
+                ])
+                ->form([
+                    ViewField::make('edit-payment-modal')
+                        ->view('filament.resources.payment-resource.pages.edit-payment-modal')
+                ])
+                ->action(function (array $data): void {
+                    // $this->record->update($data);
+                    dd($this->data);
+                    // Notification::make()
+                    //     ->title('ອັບເດດສຳເລັດ')
+                    //     ->success()
+                    //     ->send();
+                })
+        ];
+    }
+
+    
+    /*
      * ✅ ກ່ອນບັນທຶກ - ກວດສອບແລະປັບແຕ່ງຂໍ້ມູນ
      */
     protected function mutateFormDataBeforeSave(array $data): array

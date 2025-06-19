@@ -30,6 +30,7 @@ class AnnouncementResource extends Resource
     protected static ?string $navigationIcon = 'heroicon-o-megaphone';
     protected static ?string $recordTitleAttribute = 'title';
     protected static ?string $navigationGroup = 'ການສື່ສານ';
+    protected static ?int $navigationSort = 6;
     protected static ?string $pluralModelLabel = 'ປະກາດຂ່າວສານ';
     protected static ?string $modelLabel = 'ປະກາດຂ່າວສານ';
 
